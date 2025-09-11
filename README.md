@@ -1,4 +1,4 @@
-# Itinerário Extensionista 1 — Conteúdo Acessível + Gerador de CV
+# Itinerário Extensionista 1 (GRUPO 04) — Conteúdo Acessível + Gerador de CV
 
 Aplicação React com foco em conteúdo introdutório e um gerador de currículo com pré‑visualização fiel (WYSIWYG), personalização visual e exportação para PDF pronta para envio.
 
