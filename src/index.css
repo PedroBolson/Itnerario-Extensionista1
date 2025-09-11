@@ -79,3 +79,58 @@
 .btn-primary:hover {
   background-color: var(--color-primary-hover);
 }
+
+/* React DatePicker theming */
+/* React DatePicker theming with high specificity */
+.themed-datepicker.react-datepicker,
+.themed-datepicker .react-datepicker__header {
+  background-color: var(--bg-surface) !important;
+  color: var(--text-primary) !important;
+  border-color: var(--border-color) !important;
+}
+
+.themed-datepicker .react-datepicker__current-month,
+.themed-datepicker .react-datepicker-time__header,
+.themed-datepicker .react-datepicker-year-header {
+  color: var(--text-primary) !important;
+}
+
+.themed-datepicker .react-datepicker__day-name,
+.themed-datepicker .react-datepicker__day,
+.themed-datepicker .react-datepicker__month-text {
+  color: var(--text-primary) !important;
+}
+
+.themed-datepicker .react-datepicker__day:hover,
+.themed-datepicker .react-datepicker__month-text:hover {
+  background-color: var(--bg-surface-hover) !important;
+}
+
+.themed-datepicker .react-datepicker__day--selected,
+.themed-datepicker .react-datepicker__month-text--selected,
+.themed-datepicker .react-datepicker__day--keyboard-selected,
+.themed-datepicker .react-datepicker__month-text--keyboard-selected {
+  background-color: var(--color-primary) !important;
+  color: #fff !important;
+}
+
+.themed-datepicker .react-datepicker__day--in-range,
+.themed-datepicker .react-datepicker__day--in-selecting-range,
+.themed-datepicker .react-datepicker__day--selecting-range-start,
+.themed-datepicker .react-datepicker__day--selecting-range-end {
+  background-color: var(--color-primary-hover) !important;
+  color: #fff !important;
+}
+
+/* Popper container */
+.themed-datepicker-popper {
+  z-index: 50; /* above cards */
+}
+
+.themed-datepicker .react-datepicker__navigation-icon::before {
+  border-color: var(--text-secondary) !important;
+}
+
+.themed-datepicker .react-datepicker__triangle {
+  border-bottom-color: var(--bg-surface) !important;
+}
