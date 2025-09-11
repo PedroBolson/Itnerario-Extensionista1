@@ -123,8 +123,6 @@ Arquivos relevantes
 
 Capturas (ilustrativas)
 
-Adicione suas imagens em `public/screenshots/` e atualize os caminhos abaixo.
-
 | Tela | Imagem |
 |---|---|
 | Início | ![Home](public/screenshots/home.png) |
