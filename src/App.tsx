@@ -39,7 +39,7 @@ function Navigation() {
       <div className="flex flex-col sm:flex-row gap-2 bg-theme-surface/95 backdrop-blur-md rounded-2xl p-3 border border-theme shadow-xl">
         {[
           { path: '/', key: 'home', label: 'Início' },
-          { path: '/cursos', key: 'cursos', label: 'Cursos' },
+          { path: '/cursos', key: 'cursos', label: 'Mini Cursos' },
           { path: '/tutorial', key: 'tutorial', label: 'Dicas de CV' },
           { path: '/criar-cv', key: 'form', label: 'Criar CV' }
         ].map(({ path, key, label }) => (
@@ -80,13 +80,16 @@ function AnimatedRoutes() {
 
 function AppShell() {
   const location = useLocation();
-  const hideNav = location.pathname.startsWith('/auth') || location.pathname.startsWith('/dashboard');
+  const hideNav = (
+    location.pathname.startsWith('/auth') ||
+    location.pathname.startsWith('/dashboard')
+  );
 
   return (
     <div className="min-h-[100svh] bg-theme-base transition-colors duration-300">
       <ThemeSwitch />
       {!hideNav && <Navigation />}
-      <main className="bg-theme-base">
+      <main className="bg-transparent">
         <AnimatedRoutes />
       </main>
     </div>

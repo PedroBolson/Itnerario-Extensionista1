@@ -24,6 +24,21 @@
   --shadow-lg: 0 10px 15px -3px rgb(0 0 0 / 0.1);
 }
 
+.highlight {
+  box-shadow: 0 0 0 2px var(--color-primary) inset;
+}
+
+/* Active list row utility */
+.is-active {
+  background-color: var(--bg-surface-hover);
+  box-shadow: inset 0 0 0 2px var(--color-primary);
+}
+
+html, body, #root {
+  min-height: 100%;
+  background-color: var(--bg-base);
+}
+
 .dark {
   /* Cores principais dark */
   --color-primary: #8b5cf6;
@@ -32,9 +47,9 @@
   --color-accent: #22d3ee;
 
   /* Neutros escuros */
-  --bg-base: #020617;
-  --bg-surface: #0f172a;
-  --bg-surface-hover: #1e293b;
+  --bg-base: #0b1220; /* único fundo base para evitar faixas */
+  --bg-surface: #0b1220; /* igual ao base para não haver segunda cor */
+  --bg-surface-hover: #121a2b; /* leve variação apenas em hover/ativo */
   --text-primary: #f8fafc;
   --text-secondary: #cbd5e1;
   --text-muted: #94a3b8;
@@ -88,6 +103,19 @@ input, textarea, select {
 
 .btn-primary:hover {
   background-color: var(--color-primary-hover);
+}
+
+/* Softer, more visible secondary button */
+.btn-soft {
+  background: color-mix(in srgb, var(--color-primary) 13%, var(--bg-base));
+  border: 1px solid color-mix(in srgb, var(--color-primary) 35%, var(--border-color));
+  color: var(--text-primary);
+  transition: background-color 0.2s, border-color 0.2s;
+}
+
+.btn-soft:hover {
+  background: color-mix(in srgb, var(--color-primary) 20%, var(--bg-base));
+  border-color: color-mix(in srgb, var(--color-primary) 45%, var(--border-color));
 }
 
 /* React DatePicker theming */

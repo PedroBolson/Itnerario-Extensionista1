@@ -14,7 +14,7 @@ Principais objetivos
 | ![Vite](https://img.shields.io/badge/Vite-646CFF?style=for-the-badge&logo=vite&logoColor=fff) | Dev server e build |
 | ![Tailwind](https://img.shields.io/badge/Tailwind-38BDF8?style=for-the-badge&logo=tailwindcss&logoColor=fff) | Estilo utilitário + variáveis de tema |
 | ![Framer Motion](https://img.shields.io/badge/Framer%20Motion-0055FF?style=for-the-badge&logo=framer&logoColor=fff) | Animações |
-| ![React Router](https://img.shields.io/badge/React%20Router-CA4245?style=for-the-badge&logo=reactrouter&logoColor=fff) | Rotas (Início, Dicas, Criar CV) |
+| ![React Router](https://img.shields.io/badge/React%20Router-CA4245?style=for-the-badge&logo=reactrouter&logoColor=fff) | Rotas (Início, Cursos, Dicas, Criar CV) |
 | ![DateFns](https://img.shields.io/badge/react--datepicker-026AA7?style=for-the-badge&logoColor=fff) ![date-fns](https://img.shields.io/badge/date--fns-444?style=for-the-badge&logo=date-fns&logoColor=fff) | Datas mensais (MM/AAAA) em pt‑BR |
 | ![DND](https://img.shields.io/badge/%40hello--pangea%2Fdnd-6B7280?style=for-the-badge&logoColor=fff) | Drag & drop nas seções |
 | ![jsPDF](https://img.shields.io/badge/jsPDF-FFB300?style=for-the-badge&logo=javascript&logoColor=000) ![html2canvas](https://img.shields.io/badge/html2canvas-3B82F6?style=for-the-badge&logo=html5&logoColor=fff) | Exportação para PDF com fidelidade |
@@ -46,7 +46,7 @@ Scripts úteis (package.json):
 ## Estrutura de pastas
 
 - `src/App.tsx` — Shell da aplicação, navegação fixa, rotas.
-- `src/pages/` — Páginas de alto nível (`HomePage`, `TutorialPage`, `FormPage`).
+- `src/pages/` — Páginas de alto nível (`HomePage`, `CoursesPage`, `TutorialPage`, `FormPage`, `DashboardPage`).
 - `src/components/` — Componentes reutilizáveis: `Hero`, `ResumeForm`, `ResumePreview`, `ThemeSwitch`, etc.
 - `src/hooks/useTheme.ts` — Alternância Light/Dark usando class `dark` + localStorage.
 - `src/index.css` — Variáveis CSS de tema e utilitários (cores, botões, bordas).
@@ -55,8 +55,27 @@ Scripts úteis (package.json):
 ## Rotas
 
 - `/` — Início: destaque de conteúdo, CTA e cartões de categorias.
+- `/cursos` — Mini Cursos: explore Tópicos → Conteúdos → Aulas com player do YouTube embutido e playlist ao lado.
 - `/tutorial` — “Dicas de CV”: boas práticas de conteúdo/visual com animações.
 - `/criar-cv` — Formulário em etapas para montar o currículo + pré‑visualização e exportação.
+
+### Mini Cursos — UX resumida
+
+- Fluxo por estágios com transições suaves (Framer Motion):
+  - Tópicos: grid de cartões com busca. Ao selecionar, avança para Conteúdos.
+  - Conteúdos: cartões do tópico escolhido + busca contextual e ação “Trocar tópico”.
+  - Aulas: player grande (2/3 da tela) + playlist (1/3) com numeração e seleção; ações “Trocar conteúdo” e “Trocar tópico”.
+- Tudo é carregado do Firestore via `src/lib/db.ts` (coleções `topics`, `contents`, `lessons`).
+- Página: `src/pages/CoursesPage.tsx`.
+
+### Gestão de conteúdos (Dashboard)
+
+- Rota protegida: `/dashboard` (após login).
+- Reordenar com drag‑and‑drop (tipos isolados por lista):
+  - Tópicos, conteúdos e aulas possuem listas independentes com persistência do campo `order`.
+- Edição rápida inline + adicionar/remover.
+- Layout de três painéis fluido para organizar Tópicos → Conteúdos → Aulas em uma única tela.
+- Arquivos: `src/pages/DashboardPage.tsx` e `src/lib/db.ts` (helpers de CRUD e ordenação).
 
 ## Gerador de CV — Fluxo e detalhes
 
@@ -120,6 +139,28 @@ Arquivos relevantes
   - Drag & drop com `@hello-pangea/dnd` para reordenar seções entre as duas colunas.
 - `src/components/ResumePreview.tsx`
   - Layout do CV, header, foto, duas colunas, títulos/cores, chips inline (habilidades/idiomas) e links destacados.
+- `src/pages/CoursesPage.tsx`
+  - Explorer por estágios (Tópicos → Conteúdos → Aulas) com player YouTube + playlist; busca contextual e transições.
+- `src/pages/DashboardPage.tsx`
+  - Gerenciador para criar, editar e reordenar tópicos, conteúdos e aulas (drag‑and‑drop com persistência de `order`).
+- `src/lib/db.ts`
+  - CRUD no Firestore e helpers de reordenação (`reorderTopics/Contents/Lessons`).
+
+## Variáveis de ambiente (Vite + Firebase)
+
+Configure um `.env.local` com as chaves do Firebase (Vite expõe apenas prefixo `VITE_`):
+
+```
+VITE_FIREBASE_API_KEY=...
+VITE_FIREBASE_AUTH_DOMAIN=...
+VITE_FIREBASE_PROJECT_ID=...
+VITE_FIREBASE_STORAGE_BUCKET=...
+VITE_FIREBASE_MESSAGING_SENDER_ID=...
+VITE_FIREBASE_APP_ID=...
+VITE_FIREBASE_MEASUREMENT_ID=...
+```
+
+O módulo `src/lib/firebase.ts` lê essas variáveis via `import.meta.env`.
 
 Capturas (ilustrativas)
 
@@ -151,3 +192,16 @@ Capturas (ilustrativas)
 ---
 
 Qualquer dúvida sobre o fluxo do gerador ou tema, veja `ResumeForm.tsx` e `ResumePreview.tsx` — são os pontos de entrada mais diretos para evoluir a experiência do CV.
+
+## Autenticação e Acesso
+
+- Autenticação: Firebase Auth (Email/Senha).
+- Contexto: `src/context/AuthContext.tsx` expõe `user`, `loading`, `signIn(email, senha)` e `signOutUser()`.
+- Proteção de rotas: `src/routes/ProtectedRoute.tsx` redireciona para `/auth` quando não há sessão.
+- Páginas:
+  - `/auth` — Tela de login simples (email/senha). Não há fluxo de cadastro público.
+  - `/dashboard` — Área protegida de gestão de conteúdos (Tópicos/Conteúdos/Aulas).
+- Habilitar no Firebase:
+  1. Ative “Email/Password” em Authentication > Sign-in method no Console Firebase.
+  2. Crie usuários pela aba “Users” (ou via script/admin). O app não expõe cadastro.
+- Logout: botão “Sair” no cabeçalho do Dashboard usa `signOutUser()`.
