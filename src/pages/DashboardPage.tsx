@@ -22,6 +22,7 @@ import {
 import { DragDropContext, Droppable, Draggable, type DropResult } from '@hello-pangea/dnd';
 import { GripVertical, ChevronRight, Pencil, Trash2, Plus, ArrowLeft } from 'lucide-react';
 import { motion } from 'framer-motion';
+import { ConfirmDialog } from '../components/ConfirmDialog';
 
 export function DashboardPage() {
   const { signOutUser, user } = useAuth();
@@ -48,6 +49,32 @@ export function DashboardPage() {
   const [expandedContentId, setExpandedContentId] = useState<string | null>(null);
   const [lessons, setLessons] = useState<Lesson[]>([]);
   const [newLessonTitle, setNewLessonTitle] = useState('');
+
+  // Confirm dialogs
+  const [confirmDialog, setConfirmDialog] = useState<{
+    isOpen: boolean;
+    title: string;
+    message: string;
+    onConfirm: () => void;
+  }>({
+    isOpen: false,
+    title: '',
+    message: '',
+    onConfirm: () => {}
+  });
+
+  const openConfirmDialog = (title: string, message: string, onConfirm: () => void) => {
+    setConfirmDialog({
+      isOpen: true,
+      title,
+      message,
+      onConfirm
+    });
+  };
+
+  const closeConfirmDialog = () => {
+    setConfirmDialog(prev => ({ ...prev, isOpen: false }));
+  };
   const [newLessonUrl, setNewLessonUrl] = useState('');
   const [editingLessonId, setEditingLessonId] = useState<string | null>(null);
   const [editingLessonTitle, setEditingLessonTitle] = useState('');
@@ -136,8 +163,8 @@ export function DashboardPage() {
         <div className="flex items-center justify-between">
           <h1 className="text-2xl font-semibold">Gerenciador de Conteúdo</h1>
           <div className="flex items-center gap-3 mr-24">
-            <button onClick={() => navigate('/cursos')} className="px-3 py-2 rounded-xl text-sm border border-theme text-theme-secondary hover:bg-theme-surface-hover">Ver página pública</button>
-            <button onClick={() => navigate('/')} className="px-3 py-2 rounded-xl text-sm border border-theme text-theme-secondary hover:bg-theme-surface-hover">Ir para o site</button>
+            <a href="/cursos" target="_blank" rel="noopener noreferrer" className="px-3 py-2 rounded-xl text-sm border border-theme text-theme-secondary hover:bg-theme-surface-hover">Ver página pública</a>
+            <a href="/" target="_blank" rel="noopener noreferrer" className="px-3 py-2 rounded-xl text-sm border border-theme text-theme-secondary hover:bg-theme-surface-hover">Ir para o site</a>
             <span className="text-sm text-theme-secondary">{user?.email}</span>
             <button onClick={handleLogout} className="px-3 py-2 rounded-xl text-sm btn-primary">Sair</button>
           </div>
@@ -198,7 +225,7 @@ export function DashboardPage() {
                             ) : topicsActive ? (
                               <>
                                 <button className="px-3 py-2 rounded-xl border border-theme flex items-center gap-2" onClick={() => { setEditingTopicId(t.id); setEditingTopicName(t.name); }}><Pencil size={16} /> Renomear</button>
-                                <button className="px-3 py-2 rounded-xl border border-theme text-red-500 flex items-center gap-2" onClick={async () => { if (confirm('Excluir este tópico?')) await deleteTopic(t.id); }}><Trash2 size={16} /> Excluir</button>
+                                <button className="px-3 py-2 rounded-xl border border-theme text-red-500 flex items-center gap-2" onClick={() => openConfirmDialog('Excluir Tópico', `Tem certeza que deseja excluir o tópico "${t.name}"? Esta ação não pode ser desfeita.`, async () => await deleteTopic(t.id))}><Trash2 size={16} /> Excluir</button>
                               </>
                             ) : null}
                           </li>
@@ -287,7 +314,7 @@ export function DashboardPage() {
                                     ) : contentsActive ? (
                                       <>
                                         <button className="px-3 py-2 rounded-xl border border-theme" onClick={() => { setEditingContentId(c.id); setEditingContentTitle(c.title); setEditingContentDesc(c.description || ''); }}>Editar</button>
-                                        <button className="px-3 py-2 rounded-xl border border-theme text-red-500" onClick={async () => { if (confirm('Excluir este conteúdo?')) await deleteContent(c.id); }}>Excluir</button>
+                                        <button className="px-3 py-2 rounded-xl border border-theme text-red-500" onClick={() => openConfirmDialog('Excluir Conteúdo', `Tem certeza que deseja excluir o conteúdo "${c.title}"? Esta ação não pode ser desfeita.`, async () => await deleteContent(c.id))}>Excluir</button>
                                       </>
                                     ) : null}
                                   </div>
@@ -378,7 +405,7 @@ export function DashboardPage() {
                                       <button className="px-3 py-2 rounded-xl border border-theme flex items-center gap-2" onClick={() => { setEditingLessonId(l.id); setEditingLessonTitle(l.title); setEditingLessonUrl(l.youtubeUrl); }}>
                                         <Pencil size={16} /> Editar
                                       </button>
-                                      <button className="px-3 py-2 rounded-xl border border-theme text-red-500 flex items-center gap-2" onClick={async () => { if (confirm('Excluir esta aula?')) await deleteLesson(l.id); }}>
+                                      <button className="px-3 py-2 rounded-xl border border-theme text-red-500 flex items-center gap-2" onClick={() => openConfirmDialog('Excluir Aula', `Tem certeza que deseja excluir a aula "${l.title}"? Esta ação não pode ser desfeita.`, async () => await deleteLesson(l.id))}>
                                         <Trash2 size={16} /> Excluir
                                       </button>
                                     </div>
@@ -398,6 +425,17 @@ export function DashboardPage() {
           </section>
         </DragDropContext>
       </div>
+      
+      <ConfirmDialog
+        isOpen={confirmDialog.isOpen}
+        onClose={closeConfirmDialog}
+        onConfirm={confirmDialog.onConfirm}
+        title={confirmDialog.title}
+        message={confirmDialog.message}
+        confirmText="Excluir"
+        cancelText="Cancelar"
+        variant="danger"
+      />
     </div>
   );
 }
