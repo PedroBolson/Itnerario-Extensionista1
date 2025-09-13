@@ -14,7 +14,7 @@ export function ProtectedRoute() {
   }
 
   if (!user) {
-    return <Navigate to="/auth" replace state={{ from: location }} />;
+    return <Navigate to="/admin" replace state={{ from: location }} />;
   }
 
   return <Outlet />;

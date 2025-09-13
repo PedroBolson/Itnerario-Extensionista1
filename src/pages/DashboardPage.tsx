@@ -91,11 +91,13 @@ export function DashboardPage() {
   }, [contents, contentQuery]);
 
   const handleLogout = async () => {
-    await signOutUser();
-    navigate('/auth');
-  };
-
-  function handleDragEnd(result: DropResult) {
+    try {
+      await signOutUser();
+      navigate('/admin');
+    } catch (error) {
+      console.error('Error signing out:', error);
+    }
+  }; function handleDragEnd(result: DropResult) {
     const { source, destination, type } = result;
     if (!destination) return;
     if (source.droppableId === destination.droppableId && source.index === destination.index) return;

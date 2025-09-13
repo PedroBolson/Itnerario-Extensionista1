@@ -69,7 +69,7 @@ function AnimatedRoutes() {
         <Route path="/tutorial" element={<TutorialPage />} />
         <Route path="/criar-cv" element={<FormPage />} />
         <Route path="/cursos" element={<CoursesPage />} />
-        <Route path="/auth" element={<LoginPage />} />
+        <Route path="/admin" element={<LoginPage />} />
         <Route element={<ProtectedRoute />}>
           <Route path="/dashboard" element={<DashboardPage />} />
         </Route>
@@ -81,7 +81,7 @@ function AnimatedRoutes() {
 function AppShell() {
   const location = useLocation();
   const hideNav = (
-    location.pathname.startsWith('/auth') ||
+    location.pathname.startsWith('/admin') ||
     location.pathname.startsWith('/dashboard')
   );
 

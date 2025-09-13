@@ -42,59 +42,71 @@ const resumeDonts = [
     "Formato confuso ou desorganizado"
 ];
 
-const TipCard = ({ icon: Icon, title, tips, color }: {
-    icon: any;
-    title: string;
-    tips: string[];
-    color: string;
+const GuidelineRow = ({ icon: Icon, title, tips, donts, color }: {
+  icon: any;
+  title: string;
+  tips: string[];
+  donts: string[];
+  color: string;
 }) => (
-    <div className="bg-theme-surface/90 rounded-2xl p-8 backdrop-blur-sm border border-theme hover:shadow-lg transition-all duration-300">
-        <div className={`w-16 h-16 ${color} rounded-2xl flex items-center justify-center mb-6`}>
-            <Icon className="w-8 h-8 text-white" />
+  <div className="relative overflow-hidden rounded-2xl border border-theme bg-theme-surface">
+    {/* bottom accent line emanating from center */}
+    <div className="pointer-events-none absolute bottom-0 left-0 right-0 h-1" style={{ background: 'radial-gradient(80% 100% at 50% 100%, rgba(239,68,68,0.6) 0%, rgba(239,68,68,0.0) 70%)' }} />
+
+    <div className="grid md:grid-cols-[240px_1fr_1fr] gap-6 p-6 items-stretch">
+      <div className="flex flex-col items-center justify-center gap-4 text-center h-full">
+        <div className={`w-14 h-14 ${color} rounded-xl grid place-items-center`}>
+          <Icon className="w-7 h-7 text-white" />
         </div>
+        <h3 className="text-xl md:text-2xl font-bold text-theme-primary">{title}</h3>
+      </div>
 
-        <h3 className="text-2xl font-bold text-theme-primary mb-6">
-            {title}
-        </h3>
-
-        <ul className="space-y-4">
-            {tips.map((tip, index) => (
-                <li key={index} className="flex items-start gap-3">
-                    <CheckCircle className="w-5 h-5 text-emerald-500 mt-0.5 flex-shrink-0" />
-                    <span className="text-theme-secondary leading-relaxed">
-                        {tip}
-                    </span>
-                </li>
-            ))}
+      {/* Good practices */}
+      <div>
+        <div className="text-sm font-medium text-emerald-500 mb-3">Boas práticas</div>
+        <ul className="space-y-3">
+          {tips.map((tip, i) => (
+            <li key={i} className="flex items-start gap-3">
+              <CheckCircle className="w-5 h-5 text-emerald-500 mt-0.5" />
+              <span className="text-theme-secondary leading-relaxed">{tip}</span>
+            </li>
+          ))}
         </ul>
-    </div>
-);
+      </div>
 
-const DontCard = ({ title, donts }: { title: string; donts: string[] }) => (
-    <div className="bg-red-50 dark:bg-red-900/20 rounded-2xl p-8 border border-red-200 dark:border-red-800 hover:shadow-lg transition-all duration-300">
-        <div className="w-16 h-16 bg-red-500 rounded-2xl flex items-center justify-center mb-6">
-            <AlertTriangle className="w-8 h-8 text-white" />
-        </div>
-
-        <h3 className="text-2xl font-bold text-red-600 dark:text-red-400 mb-6">
-            {title}
-        </h3>
-
-        <ul className="space-y-4">
-            {donts.map((dont, index) => (
-                <li key={index} className="flex items-start gap-3">
-                    <AlertTriangle className="w-5 h-5 text-red-500 mt-0.5 flex-shrink-0" />
-                    <span className="text-red-700 dark:text-red-300 leading-relaxed">
-                        {dont}
-                    </span>
-                </li>
-            ))}
+      {/* Avoid */}
+      <div className="rounded-xl p-4 bg-red-500/5 border border-red-500/30">
+        <div className="text-sm font-medium text-red-500 mb-3">O que evitar</div>
+        <ul className="space-y-3">
+          {donts.map((d, i) => (
+            <li key={i} className="flex items-start gap-3">
+              <AlertTriangle className="w-5 h-5 text-red-500 mt-0.5" />
+              <span className="text-red-600 dark:text-red-300 leading-relaxed">{d}</span>
+            </li>
+          ))}
         </ul>
+      </div>
     </div>
+  </div>
 );
 
 export const Tutorial = () => {
     const navigate = useNavigate();
+
+    // Motion variants para animação suave por etapas
+    const container = {
+      hidden: { opacity: 0, y: 16 },
+      show: {
+        opacity: 1,
+        y: 0,
+        transition: { duration: 0.5, ease: 'easeOut', when: 'beforeChildren', staggerChildren: 0.08 }
+      }
+    } as const;
+
+    const item = {
+      hidden: { opacity: 0, y: 10 },
+      show: { opacity: 1, y: 0, transition: { duration: 0.4, ease: 'easeOut' } }
+    } as const;
 
     return (
         <section className="py-20 bg-theme-base min-h-screen">
@@ -115,57 +127,48 @@ export const Tutorial = () => {
                     </p>
                 </motion.div>
 
+                {/* Seção com carregamento em etapas e entrada on-scroll */}
                 <motion.div
-                    initial={{ opacity: 0, y: 40 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    transition={{ duration: 0.6, delay: 0.2 }}
-                    className="grid lg:grid-cols-3 gap-8 mb-16"
+                  variants={container}
+                  initial="hidden"
+                  whileInView="show"
+                  viewport={{ once: true, amount: 0.15 }}
+                  className="space-y-6 mb-16"
                 >
-                    <TipCard
-                        icon={Camera}
-                        title="Foto Profissional"
-                        tips={photoTips}
-                        color="bg-gradient-to-r from-blue-500 to-cyan-500"
+                  <motion.div variants={item}>
+                    <GuidelineRow
+                      icon={Camera}
+                      title="Foto Profissional"
+                      tips={photoTips}
+                      donts={photoDonts}
+                      color="bg-gradient-to-r from-blue-500 to-cyan-500"
                     />
+                  </motion.div>
 
-                    <TipCard
-                        icon={FileText}
-                        title="Conteúdo do Currículo"
-                        tips={resumeTips}
-                        color="bg-gradient-to-r from-violet-500 to-purple-500"
+                  <motion.div variants={item}>
+                    <GuidelineRow
+                      icon={FileText}
+                      title="Conteúdo do Currículo"
+                      tips={resumeTips}
+                      donts={resumeDonts}
+                      color="bg-gradient-to-r from-violet-500 to-purple-500"
                     />
+                  </motion.div>
 
-                    <TipCard
-                        icon={Star}
-                        title="Design & Layout"
-                        tips={designTips}
-                        color="bg-gradient-to-r from-emerald-500 to-teal-500"
+                  <motion.div variants={item}>
+                    <GuidelineRow
+                      icon={Star}
+                      title="Design & Layout"
+                      tips={designTips}
+                      donts={[
+                        "Fontes muito decorativas",
+                        "Excesso de cores e elementos",
+                        "Falta de organização visual",
+                        "Informações sobrepostas",
+                      ]}
+                      color="bg-gradient-to-r from-emerald-500 to-teal-500"
                     />
-                </motion.div>
-
-                <motion.div
-                    initial={{ opacity: 0, y: 40 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    transition={{ duration: 0.6, delay: 0.4 }}
-                    className="mb-16"
-                >
-                    <h3 className="text-3xl font-bold text-center text-theme-primary mb-12">
-                        O que <span className="text-red-500">Evitar</span>
-                    </h3>
-
-                    <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
-                        <DontCard title="Foto Profissional" donts={photoDonts} />
-                        <DontCard title="Conteúdo" donts={resumeDonts} />
-                        <DontCard
-                            title="Design"
-                            donts={[
-                                "Fontes muito decorativas",
-                                "Excesso de cores e elementos",
-                                "Falta de organização visual",
-                                "Informações sobrepostas"
-                            ]}
-                        />
-                    </div>
+                  </motion.div>
                 </motion.div>
 
                 <motion.div
@@ -179,7 +182,7 @@ export const Tutorial = () => {
                     <p className="text-white/90 mb-6 text-lg">Gere seu CV com cores personalizadas e preview fiel antes de baixar.</p>
                     <button
                         onClick={() => navigate('/criar-cv')}
-                        className="bg-theme-inverted text-theme-base px-8 py-4 rounded-full font-semibold hover:bg-theme-inverted/90 transition-all duration-300 shadow-lg hover:shadow-xl transform hover:-translate-y-1"
+                        className="bg-theme-inverted text-theme-base px-8 py-4 rounded-full font-semibold hover:bg-theme-inverted/90 transition-all duration-300 shadow-lg hover:shadow-xl transform hover:-translate-y-1 cursor-pointer"
                     >
                         Criar meu CV
                     </button>

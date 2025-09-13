@@ -197,9 +197,9 @@ Qualquer dúvida sobre o fluxo do gerador ou tema, veja `ResumeForm.tsx` e `Resu
 
 - Autenticação: Firebase Auth (Email/Senha).
 - Contexto: `src/context/AuthContext.tsx` expõe `user`, `loading`, `signIn(email, senha)` e `signOutUser()`.
-- Proteção de rotas: `src/routes/ProtectedRoute.tsx` redireciona para `/auth` quando não há sessão.
+- Proteção de rotas: `src/routes/ProtectedRoute.tsx` redireciona para `/admin` quando não há sessão.
 - Páginas:
-  - `/auth` — Tela de login simples (email/senha). Não há fluxo de cadastro público.
+  - `/admin` — Tela de login simples (email/senha). Não há fluxo de cadastro público.
   - `/dashboard` — Área protegida de gestão de conteúdos (Tópicos/Conteúdos/Aulas).
 - Habilitar no Firebase:
   1. Ative “Email/Password” em Authentication > Sign-in method no Console Firebase.
