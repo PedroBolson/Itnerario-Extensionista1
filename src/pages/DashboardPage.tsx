@@ -60,7 +60,7 @@ export function DashboardPage() {
     isOpen: false,
     title: '',
     message: '',
-    onConfirm: () => {}
+    onConfirm: () => { }
   });
 
   const openConfirmDialog = (title: string, message: string, onConfirm: () => void) => {
@@ -425,7 +425,7 @@ export function DashboardPage() {
           </section>
         </DragDropContext>
       </div>
-      
+
       <ConfirmDialog
         isOpen={confirmDialog.isOpen}
         onClose={closeConfirmDialog}
