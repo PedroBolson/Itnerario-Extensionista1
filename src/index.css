@@ -70,6 +70,16 @@
   border-color: var(--border-color);
 }
 
+/* Inputs: placeholder and text color aligned with theme */
+input::placeholder,
+textarea::placeholder {
+  color: var(--text-muted);
+}
+
+input, textarea, select {
+  color: var(--text-primary);
+}
+
 .btn-primary {
   background-color: var(--color-primary);
   color: white;
