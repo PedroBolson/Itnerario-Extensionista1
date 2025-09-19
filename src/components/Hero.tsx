@@ -60,7 +60,7 @@ export const Hero = () => {
                     </h1>
 
                     <p className="text-lg lg:text-xl text-theme-secondary max-w-3xl mx-auto leading-relaxed">
-                        Conteúdos curtos, diretos e sempre atualizados para quem quer dar os primeiros passos no computador e explorar temas atuais — incluindo dicas práticas para um CV mais forte.
+                        Conteúdos curtos, diretos e sempre atualizados para quem quer dar os primeiros passos no computador e explorar temas atuais — incluindo dicas práticas para um currículo mais forte.
                     </p>
                 </motion.div>
 
@@ -75,7 +75,7 @@ export const Hero = () => {
                         className="group relative px-6 py-3 btn-primary rounded-full font-semibold shadow-lg hover:shadow-xl transition-all duration-300 transform hover:-translate-y-1"
                     >
                         <span className="relative z-10 flex items-center gap-2">
-                            Criar meu CV
+                            Criar meu Currículo
                             <ArrowRight className="w-4 h-4 group-hover:translate-x-1 transition-transform" />
                         </span>
                     </button>
@@ -84,7 +84,7 @@ export const Hero = () => {
                         onClick={() => navigate('/tutorial')}
                         className="px-6 py-3 bg-theme-surface/90 text-theme-secondary rounded-full font-semibold border border-theme backdrop-blur-sm hover:bg-theme-surface transition-all duration-300"
                     >
-                        Dicas de CV
+                        Dicas de Currículo
                     </button>
                 </motion.div>
 
@@ -107,7 +107,7 @@ export const Hero = () => {
                         },
                         {
                             icon: Users,
-                            title: "Dicas de CV",
+                            title: "Dicas de Currículo",
                             description: "O que recrutadores valorizam"
                         }
                     ].map((item, index) => (

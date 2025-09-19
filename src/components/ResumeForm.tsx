@@ -213,9 +213,10 @@ export const ResumeForm = () => {
                 const y = (r.top - containerRect.top) * ratioY;
                 const w = r.width * ratioX;
                 const h = r.height * ratioY;
-                (pdf as any).link(x, y, w, h, { url: href });
+                (pdf as unknown as { link: (x: number, y: number, w: number, h: number, options: { url: string }) => void }).link(x, y, w, h, { url: href });
             });
-        } catch (_) {
+        } catch {
+            // Silently ignore PDF link errors
         }
         pdf.save(`${formData.personalInfo.name || 'cv'}-preview.pdf`);
     };
@@ -228,7 +229,7 @@ export const ResumeForm = () => {
         { icon: LanguagesIcon, title: 'Idiomas', description: 'Nível e certificações' },
         { icon: Medal, title: 'Certificações', description: 'Títulos e links' },
         { icon: FolderGit2, title: 'Projetos', description: 'Projetos pessoais ou sociais' },
-        { icon: Eye, title: 'Pré-visualização', description: 'Visualize e baixe seu CV' }
+        { icon: Eye, title: 'Pré-visualização', description: 'Visualize e baixe seu currículo' }
     ];
 
     const progressPercent = Math.max(0, Math.min(100, (currentStep / (steps.length - 1)) * 100));
@@ -1057,7 +1058,7 @@ export const ResumeForm = () => {
                                             </div>
                                         </div>
                                         <div>
-                                            <label className="block text-sm font-medium text-theme-secondary mb-2">Fonte do CV</label>
+                                            <label className="block text-sm font-medium text-theme-secondary mb-2">Fonte do Currículo</label>
                                             <select
                                                 className="w-full px-4 py-3 border border-theme rounded-lg bg-theme-surface text-theme-primary"
                                                 value={fontFamily}

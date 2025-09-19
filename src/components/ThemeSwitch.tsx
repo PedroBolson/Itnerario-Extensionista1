@@ -43,7 +43,7 @@ export const ThemeSwitch = () => {
     const { isDark, toggleTheme } = useTheme();
 
     return (
-        <div className="fixed top-4 right-4 z-50">
+        <div className="fixed top-4 right-4 md:top-6 md:right-6 z-50">
             <motion.button
                 onClick={toggleTheme}
                 className="relative w-16 h-8 rounded-full focus:outline-none focus:ring-2 focus:ring-primary/30 transition-all duration-300 overflow-hidden"
