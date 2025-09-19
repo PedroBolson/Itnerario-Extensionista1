@@ -1,4 +1,4 @@
-import { motion, AnimatePresence } from 'framer-motion';
+import { motion } from 'framer-motion';
 import { useState, useMemo } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import InstantTooltip from './InstantTooltip';
@@ -63,8 +63,8 @@ export default function Navigation() {
                                 <motion.button
                                     onClick={() => handleNavigation(item.path)}
                                     className={`relative w-12 h-12 rounded-xl flex items-center justify-center transition-colors duration-300 ${isActive
-                                            ? 'text-blue-600 dark:text-blue-400'
-                                            : 'hover:bg-theme-surface-hover text-theme-secondary hover:text-theme-primary'
+                                        ? 'text-blue-600 dark:text-blue-400'
+                                        : 'hover:bg-theme-surface-hover text-theme-secondary hover:text-theme-primary'
                                         }`}
                                     whileHover={{
                                         scale: 1.05,
@@ -75,10 +75,10 @@ export default function Navigation() {
                                         transition: { type: "spring", stiffness: 400, damping: 25 }
                                     }}
                                 >
-                                    {/* Indicator de fundo móvel */}
+                                    {/* Indicator de fundo móvel - APENAS DESKTOP */}
                                     {isActive && (
                                         <motion.div
-                                            layoutId="navIndicator"
+                                            layoutId="desktopNavIndicator"
                                             className="absolute inset-0 rounded-xl bg-gradient-to-br from-blue-500/20 via-purple-500/20 to-blue-600/20 border border-blue-500/30"
                                             transition={{
                                                 type: "spring",
@@ -109,116 +109,84 @@ export default function Navigation() {
                 </div>
             </div>
 
-            {/* Mobile Hamburger Button */}
-            <motion.button
+            {/* Mobile Hamburger Button - Otimizado iOS */}
+            <button
                 onClick={toggleMobileMenu}
-                className={`md:hidden fixed top-4 left-4 z-[60] w-12 h-12 rounded-full bg-white/90 dark:bg-gray-800/90 backdrop-blur-md shadow-lg border border-gray-200 dark:border-gray-700 flex items-center justify-center transition-all duration-300`}
-                whileHover={{ scale: 1.05 }}
-                whileTap={{ scale: 0.95 }}
-                animate={{
-                    x: isMobileMenuOpen ? 240 : 0
+                className={`md:hidden fixed top-4 z-[60] w-12 h-12 rounded-full bg-white dark:bg-gray-800 shadow-lg border border-gray-200 dark:border-gray-700 flex items-center justify-center transition-all duration-300 ${isMobileMenuOpen ? 'left-[256px]' : 'left-4'
+                    }`}
+                style={{
+                    transform: `translateX(${isMobileMenuOpen ? '0px' : '0px'})`,
+                    willChange: 'transform'
                 }}
-                transition={{ type: "spring", stiffness: 260, damping: 20 }}
             >
-                <div className="relative w-6 h-6 flex flex-col items-center justify-center">
-                    <motion.span
-                        className="block absolute w-5 h-0.5 bg-gray-800 dark:bg-white rounded-full"
-                        style={{ top: '8px' }}
-                        animate={{
-                            rotate: isMobileMenuOpen ? 45 : 0,
-                            y: isMobileMenuOpen ? 4 : 0,
-                        }}
-                        transition={{ duration: 0.3, ease: "easeInOut" }}
+                <div className="relative w-6 h-6">
+                    {/* Linha 1 */}
+                    <span
+                        className={`absolute w-5 h-0.5 bg-gray-800 dark:bg-white rounded-full transition-all duration-300 ease-out ${isMobileMenuOpen
+                                ? 'top-3 left-0.5 rotate-45'
+                                : 'top-2 left-0.5'
+                            }`}
                     />
-                    <motion.span
-                        className="block absolute w-5 h-0.5 bg-gray-800 dark:bg-white rounded-full"
-                        style={{ top: '12px' }}
-                        animate={{
-                            opacity: isMobileMenuOpen ? 0 : 1,
-                            scaleX: isMobileMenuOpen ? 0 : 1
-                        }}
-                        transition={{ duration: 0.2, ease: "easeInOut" }}
+                    {/* Linha 2 */}
+                    <span
+                        className={`absolute w-5 h-0.5 bg-gray-800 dark:bg-white rounded-full transition-all duration-200 ease-out top-3 left-0.5 ${isMobileMenuOpen ? 'opacity-0' : 'opacity-100'
+                            }`}
                     />
-                    <motion.span
-                        className="block absolute w-5 h-0.5 bg-gray-800 dark:bg-white rounded-full"
-                        style={{ top: '16px' }}
-                        animate={{
-                            rotate: isMobileMenuOpen ? -45 : 0,
-                            y: isMobileMenuOpen ? -4 : 0,
-                        }}
-                        transition={{ duration: 0.3, ease: "easeInOut" }}
+                    {/* Linha 3 */}
+                    <span
+                        className={`absolute w-5 h-0.5 bg-gray-800 dark:bg-white rounded-full transition-all duration-300 ease-out ${isMobileMenuOpen
+                                ? 'top-3 left-0.5 -rotate-45'
+                                : 'top-4 left-0.5'
+                            }`}
                     />
                 </div>
-            </motion.button>
+            </button>
 
-            {/* Mobile Menu Overlay */}
-            <AnimatePresence>
-                {isMobileMenuOpen && (
-                    <>
-                        <motion.div
-                            initial={{ opacity: 0 }}
-                            animate={{ opacity: 1 }}
-                            exit={{ opacity: 0 }}
-                            onClick={toggleMobileMenu}
-                            className="md:hidden fixed inset-0 bg-black/20 backdrop-blur-sm z-40"
-                        />
+            {/* Mobile Menu Overlay - SEM ANIMAÇÕES */}
+            {isMobileMenuOpen && (
+                <>
+                    <div
+                        onClick={toggleMobileMenu}
+                        className="md:hidden fixed inset-0 bg-black/20 z-40"
+                    />
 
-                        <motion.div
-                            initial={{ x: '-100%' }}
-                            animate={{ x: 0 }}
-                            exit={{ x: '-100%' }}
-                            transition={{
-                                type: "spring",
-                                stiffness: 300,
-                                damping: 30
-                            }}
-                            className="md:hidden fixed left-0 top-0 h-screen w-80 bg-theme-surface backdrop-blur-md shadow-2xl z-40"
-                        >
-                            <div className="flex flex-col justify-center h-full space-y-6 p-8">
-                                {navItems.map((item, index) => {
-                                    const Icon = item.icon;
-                                    const isActive = location.pathname === item.path;
+                    <div className="md:hidden fixed left-0 top-0 h-screen w-80 bg-theme-surface shadow-2xl z-40 transform transition-transform duration-300 ease-out">
+                        <div className="flex flex-col justify-center h-full space-y-4 p-8">
+                            {navItems.map((item) => {
+                                const Icon = item.icon;
+                                const isActive = location.pathname === item.path;
 
-                                    return (
-                                        <motion.button
-                                            key={item.path}
-                                            onClick={() => handleNavigation(item.path)}
-                                            className={`flex items-center space-x-4 p-4 rounded-xl transition-all duration-300 ${isActive
-                                                ? 'bg-theme-surface-hover shadow-md'
-                                                : 'hover:bg-theme-surface-hover'
-                                                }`}
-                                            initial={{ opacity: 0, x: -20 }}
-                                            animate={{ opacity: 1, x: 0 }}
-                                            transition={{ delay: index * 0.1 }}
-                                            whileHover={{ scale: 1.02, x: 8 }}
-                                            whileTap={{ scale: 0.98 }}
-                                        >
-                                            <div className={`w-12 h-12 rounded-lg ${item.color} flex items-center justify-center text-white`}>
-                                                <Icon />
-                                            </div>
-                                            <span className="text-lg font-medium text-theme-primary">
-                                                {item.label}
-                                            </span>
+                                return (
+                                    <button
+                                        key={item.path}
+                                        onClick={() => handleNavigation(item.path)}
+                                        className={`relative flex items-center space-x-4 p-4 rounded-xl transition-colors duration-200 ${isActive
+                                            ? 'bg-theme-surface-hover text-blue-600 dark:text-blue-400'
+                                            : 'text-theme-secondary active:bg-theme-surface-hover'
+                                            }`}
+                                    >
+                                        {/* Indicador fixo simples */}
+                                        {isActive && (
+                                            <div className="absolute left-0 top-0 bottom-0 w-1 bg-gradient-to-b from-blue-500 to-purple-500 rounded-r-full" />
+                                        )}
 
-                                            {isActive && (
-                                                <motion.div
-                                                    className="ml-auto w-2 h-2 rounded-full bg-gradient-to-r from-violet-500 to-cyan-500"
-                                                    layoutId="activeMobileIndicator"
-                                                    transition={{
-                                                        type: "spring",
-                                                        stiffness: 350,
-                                                        damping: 25
-                                                    }}
-                                                />
-                                            )}
-                                        </motion.button>
-                                    );
-                                })}
-                            </div>
-                        </motion.div>
-                    </>
-                )}
-            </AnimatePresence>
+                                        <div className={`w-10 h-10 rounded-lg ${item.color} flex items-center justify-center text-white flex-shrink-0 text-sm`}>
+                                            <Icon />
+                                        </div>
+                                        <span className="text-base font-medium flex-1 text-left">
+                                            {item.label}
+                                        </span>
+
+                                        {isActive && (
+                                            <div className="w-2 h-2 rounded-full bg-blue-500 flex-shrink-0" />
+                                        )}
+                                    </button>
+                                );
+                            })}
+                        </div>
+                    </div>
+                </>
+            )}
         </>
     );
 }
