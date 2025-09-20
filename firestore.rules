@@ -85,25 +85,6 @@ service cloud.firestore {
   }
 
   function isValidLessonProgressMap(progress) {
-    return progress is map && progress.values().all(entry => isValidLessonProgressEntry(entry));
-  }
-
-  function isValidLessonProgressEntry(entry) {
-    return entry is map &&
-      entry.keys().hasOnly(['lastPosition', 'duration', 'completed', 'lessonTitle', 'contentTitle', 'contentId', 'topicId', 'topicTitle', 'updatedAt', 'completedAt']) &&
-      entry.lastPosition is number && entry.lastPosition >= 0 &&
-      entry.duration is number && entry.duration >= 0 &&
-      entry.completed is bool &&
-      isStringOrNull(entry.lessonTitle) &&
-      isStringOrNull(entry.contentTitle) &&
-      isStringOrNull(entry.contentId) &&
-      isStringOrNull(entry.topicId) &&
-      isStringOrNull(entry.topicTitle) &&
-      (entry.updatedAt is timestamp || entry.updatedAt == request.time) &&
-      (entry.completedAt == null || entry.completedAt is timestamp || entry.completedAt == request.time);
-  }
-
-  function isStringOrNull(value) {
-    return value == null || value is string;
+    return progress is map;
   }
 }

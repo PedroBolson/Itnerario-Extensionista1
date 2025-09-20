@@ -1,6 +1,14 @@
 {
   "indexes": [
     {
+      "collectionGroup": "topics",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "order", "order": "ASCENDING" },
+        { "fieldPath": "createdAt", "order": "ASCENDING" }
+      ]
+    },
+    {
       "collectionGroup": "contents",
       "queryScope": "COLLECTION",
       "fields": [
@@ -21,4 +29,3 @@
   ],
   "fieldOverrides": []
 }
-
