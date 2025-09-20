@@ -260,7 +260,7 @@ export function LearnerAccess({ isOpen, onClose }: LearnerAccessProps) {
                         </div>
                         <div className="space-y-1">
                             <div className="text-lg font-semibold">Perfil criado com sucesso!</div>
-                            <p className="text-sm text-theme-secondary">Guarde e compartilhe o código abaixo para acompanhar seu progresso.</p>
+                            <p className="text-sm text-theme-secondary">Guarde o código abaixo para acompanhar seu progresso.</p>
                         </div>
                         <div className="flex items-center justify-center gap-3">
                             <div className="px-5 py-3 rounded-xl border border-theme bg-theme-base text-lg font-mono tracking-[0.6em]">
@@ -274,6 +274,7 @@ export function LearnerAccess({ isOpen, onClose }: LearnerAccessProps) {
                                 <span className="text-sm font-medium">{copied ? 'Copiado!' : 'Copiar'}</span>
                             </button>
                         </div>
+                        <p className="text-xs text-theme-secondary">Se preciso entre em contato com um administrador para recuperar seu código de acompanhamento.</p>
                         <button
                             onClick={handleClose}
                             className="w-full px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition-colors"

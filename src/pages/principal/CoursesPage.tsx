@@ -5,7 +5,7 @@ import { YouTubePlayer } from '../../components/YouTubePlayer';
 import { CourseImage } from '../../components/CourseImage';
 import { CategoryIcon } from '../../components/CategoryIcon';
 import { motion, AnimatePresence } from 'framer-motion';
-import { getCategoryInfo, getDifficultyInfo, formatDuration, generateColorFromString } from '../../lib/courseUtils';
+import { getCategoryInfo, getDifficultyInfo, generateColorFromString } from '../../lib/courseUtils';
 import { Home, Search, Clock, ChevronRight, BookOpen, CheckCircle2, User, LogOut } from 'lucide-react';
 import { useLearner } from '../../context/LearnerContext';
 import { LearnerAccess } from '../../components/LearnerAccess';
@@ -249,12 +249,7 @@ export function CoursesPage() {
                         </div>
 
                         {/* Duração (se disponível) */}
-                        {c.estimatedDuration && (
-                          <div className="absolute top-3 left-3 px-2 py-1 bg-black/50 backdrop-blur-sm rounded-full text-xs font-medium text-white flex items-center gap-1">
-                            <Clock size={12} />
-                            <span>{formatDuration(c.estimatedDuration)}</span>
-                          </div>
-                        )}
+
                       </div>
 
                       {/* Informações do curso */}

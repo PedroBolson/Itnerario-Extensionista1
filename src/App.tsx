@@ -13,8 +13,7 @@ import { AuthProvider } from './context/AuthContext';
 import { CoursesPage } from './pages/principal/CoursesPage';
 import { LearnerProvider } from './context/LearnerContext';
 import Navigation from './components/Navigation';
-
-
+import { useAuth } from './hooks/useAuth';
 
 function AnimatedRoutes() {
   const location = useLocation();
@@ -39,10 +38,31 @@ function AnimatedRoutes() {
 function AppShell() {
   const location = useLocation();
   const hideNav = location.pathname.startsWith('/admin') && location.pathname === '/admin';
+  const isAdminView = location.pathname.startsWith('/dashboard');
+  const { signOutUser } = useAuth();
+
+  const handleAdminSignOut = async () => {
+    try {
+      await signOutUser();
+    } catch (error) {
+      console.error('Erro ao sair:', error);
+    }
+  };
 
   return (
     <div className="min-h-[100svh] bg-theme-base transition-colors duration-300">
-      <ThemeSwitch />
+      {!isAdminView && <ThemeSwitch />}
+      {isAdminView && (
+        <div className="fixed top-4 right-4 md:top-6 md:right-6 z-30 flex items-center gap-2">
+          <ThemeSwitch fixed={false} />
+          <button
+            onClick={handleAdminSignOut}
+            className="px-4 py-2 rounded-xl border border-theme text-theme-secondary hover:text-theme-primary hover:bg-theme-surface transition-colors text-sm"
+          >
+            Sair
+          </button>
+        </div>
+      )}
       {!hideNav && <Navigation />}
       <main className={`bg-transparent transition-all duration-500 ${!hideNav ? 'md:pl-24' : ''}`}>
         <AnimatedRoutes />

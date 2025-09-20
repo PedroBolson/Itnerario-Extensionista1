@@ -1,657 +1,888 @@
-import { useEffect, useMemo, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
-import { useAuth } from '../../hooks/useAuth';
+import { useEffect, useMemo, useState, type FormEvent } from 'react';
+import { DragDropContext, Droppable, Draggable, type DropResult } from '@hello-pangea/dnd';
+import {
+  ArrowLeft,
+  BookOpen,
+  ChevronRight,
+  LayoutGrid,
+  Pencil,
+  Plus,
+  Trash2,
+  Video,
+} from 'lucide-react';
 import type { Topic, Content, Lesson } from '../../lib/db';
 import {
   createTopic,
   createContent,
   createLesson,
+  updateTopic,
+  updateContent,
+  updateLesson,
+  deleteTopic,
   deleteContent,
   deleteLesson,
-  deleteTopic,
   listenTopics,
   listenContentsByTopic,
   listenLessonsByContent,
-  updateContent,
-  updateLesson,
-  updateTopic,
   reorderTopics,
   reorderContents,
   reorderLessons,
 } from '../../lib/db';
-import { DragDropContext, Droppable, Draggable, type DropResult } from '@hello-pangea/dnd';
-import { GripVertical, ChevronRight, Pencil, Trash2, Plus, ArrowLeft } from 'lucide-react';
-import { motion } from 'framer-motion';
+
+import { CourseImage } from '../../components/CourseImage';
+import { CategoryIcon } from '../../components/CategoryIcon';
+import {
+  TOPIC_CATEGORIES,
+  DIFFICULTY_LEVELS,
+  getCategoryInfo,
+  getDifficultyInfo,
+  generateColorFromString,
+  type TopicCategory,
+  type DifficultyLevel,
+} from '../../lib/courseUtils';
+import { YouTubePlayer } from '../../components/YouTubePlayer';
 import { ConfirmDialog } from '../../components/ConfirmDialog';
-import { TOPIC_CATEGORIES, DIFFICULTY_LEVELS } from '../../lib/courseUtils';
+import { AdminModal } from '../../components/AdminModal';
+
+interface TopicFormState {
+  name: string;
+  category: string;
+  coverImageUrl: string;
+}
+
+interface ContentFormState {
+  title: string;
+  description: string;
+  coverImageUrl: string;
+  difficulty: string;
+}
+
+interface LessonFormState {
+  title: string;
+  youtubeUrl: string;
+  description: string;
+}
+
+type FormTarget =
+  | { entity: 'topic'; mode: 'create' }
+  | { entity: 'topic'; mode: 'edit'; item: Topic }
+  | { entity: 'content'; mode: 'create' }
+  | { entity: 'content'; mode: 'edit'; item: Content }
+  | { entity: 'lesson'; mode: 'create' }
+  | { entity: 'lesson'; mode: 'edit'; item: Lesson };
+
+type PendingDelete =
+  | { entity: 'topic'; item: Topic }
+  | { entity: 'content'; item: Content }
+  | { entity: 'lesson'; item: Lesson }
+  | null;
+
+function createEmptyTopicForm(): TopicFormState {
+  return { name: '', category: '', coverImageUrl: '' };
+}
+
+function createEmptyContentForm(): ContentFormState {
+  return { title: '', description: '', coverImageUrl: '', difficulty: '' };
+}
+
+function createEmptyLessonForm(): LessonFormState {
+  return { title: '', youtubeUrl: '', description: '' };
+}
 
 export function DashboardPage() {
-  const { signOutUser, user } = useAuth();
-  const navigate = useNavigate();
 
-  const [selectedTopic, setSelectedTopic] = useState<Topic | null>(null);
-  const [topicQuery, setTopicQuery] = useState('');
-
-  // Topics
   const [topics, setTopics] = useState<Topic[]>([]);
-  const [newTopicName, setNewTopicName] = useState('');
-  const [newTopicImageUrl, setNewTopicImageUrl] = useState('');
-  const [newTopicCategory, setNewTopicCategory] = useState('');
-  const [editingTopicId, setEditingTopicId] = useState<string | null>(null);
-  const [editingTopicName, setEditingTopicName] = useState('');
-  const [editingTopicImageUrl, setEditingTopicImageUrl] = useState('');
-  const [editingTopicCategory, setEditingTopicCategory] = useState('');
-
-  // Contents (for selected topic)
   const [contents, setContents] = useState<Content[]>([]);
-  const [newContentTitle, setNewContentTitle] = useState('');
-  const [newContentDesc, setNewContentDesc] = useState('');
-  const [newContentImageUrl, setNewContentImageUrl] = useState('');
-  const [newContentDifficulty, setNewContentDifficulty] = useState('');
-  const [newContentDuration, setNewContentDuration] = useState('');
-  const [editingContentId, setEditingContentId] = useState<string | null>(null);
-  const [editingContentTitle, setEditingContentTitle] = useState('');
-  const [editingContentDesc, setEditingContentDesc] = useState('');
-  const [editingContentImageUrl, setEditingContentImageUrl] = useState('');
-  const [editingContentDifficulty, setEditingContentDifficulty] = useState('');
-  const [editingContentDuration, setEditingContentDuration] = useState('');
-
-  // Lessons (for selected content)
-  const [expandedContentId, setExpandedContentId] = useState<string | null>(null);
   const [lessons, setLessons] = useState<Lesson[]>([]);
-  const [newLessonTitle, setNewLessonTitle] = useState('');
 
-  // Confirm dialogs
-  const [confirmDialog, setConfirmDialog] = useState<{
-    isOpen: boolean;
-    title: string;
-    message: string;
-    onConfirm: () => void;
-  }>({
-    isOpen: false,
-    title: '',
-    message: '',
-    onConfirm: () => { }
-  });
+  const [selectedTopicId, setSelectedTopicId] = useState('');
+  const [selectedContentId, setSelectedContentId] = useState('');
+  const [activeLessonId, setActiveLessonId] = useState('');
 
-  const openConfirmDialog = (title: string, message: string, onConfirm: () => void) => {
-    setConfirmDialog({
-      isOpen: true,
-      title,
-      message,
-      onConfirm
-    });
-  };
-
-  const closeConfirmDialog = () => {
-    setConfirmDialog(prev => ({ ...prev, isOpen: false }));
-  };
-  const [newLessonUrl, setNewLessonUrl] = useState('');
-  const [editingLessonId, setEditingLessonId] = useState<string | null>(null);
-  const [editingLessonTitle, setEditingLessonTitle] = useState('');
-  const [editingLessonUrl, setEditingLessonUrl] = useState('');
-  const [addingLessonForId, setAddingLessonForId] = useState<string | null>(null);
-
-  // Live data
-  useEffect(() => {
-    const unsub = listenTopics(setTopics);
-    return () => unsub();
-  }, []);
-
-  useEffect(() => {
-    if (!selectedTopic) { setContents([]); return; }
-    const unsub = listenContentsByTopic(selectedTopic.id, setContents);
-    return () => unsub();
-  }, [selectedTopic]);
-
-  useEffect(() => {
-    if (!expandedContentId) { setLessons([]); return; }
-    const unsub = listenLessonsByContent(expandedContentId, setLessons);
-    return () => unsub();
-  }, [expandedContentId]);
-
-  useEffect(() => {
-    setAddingLessonForId(null);
-  }, [expandedContentId]);
-
-  const selectedTopicName = selectedTopic?.name || '';
-  const expandedContentTitle = useMemo(() => contents.find(c => c.id === expandedContentId)?.title || '', [contents, expandedContentId]);
-  const filteredTopics = useMemo(() => {
-    const q = topicQuery.trim().toLowerCase();
-    if (!q) return topics;
-    return topics.filter(t => t.name.toLowerCase().includes(q));
-  }, [topics, topicQuery]);
+  const [topicQuery, setTopicQuery] = useState('');
   const [contentQuery, setContentQuery] = useState('');
+
+  const [formTarget, setFormTarget] = useState<FormTarget | null>(null);
+  const [topicForm, setTopicForm] = useState<TopicFormState>(createEmptyTopicForm());
+  const [contentForm, setContentForm] = useState<ContentFormState>(createEmptyContentForm());
+  const [lessonForm, setLessonForm] = useState<LessonFormState>(createEmptyLessonForm());
+
+  const [pendingDelete, setPendingDelete] = useState<PendingDelete>(null);
+
+
+
+  useEffect(() => listenTopics(setTopics), []);
+  useEffect(() => {
+    if (!selectedTopicId) {
+      setContents([]);
+      return;
+    }
+    return listenContentsByTopic(selectedTopicId, setContents);
+  }, [selectedTopicId]);
+
+  useEffect(() => {
+    if (!selectedContentId) {
+      setLessons([]);
+      return;
+    }
+    return listenLessonsByContent(selectedContentId, (items) => {
+      setLessons(items);
+      if (items.length > 0 && !items.find((lesson) => lesson.id === activeLessonId)) {
+        setActiveLessonId(items[0].id);
+      }
+    });
+  }, [selectedContentId, activeLessonId]);
+
+  const activeStage: 'topics' | 'contents' | 'lessons' = !selectedTopicId ? 'topics' : !selectedContentId ? 'contents' : 'lessons';
+
+  const activeTopic = useMemo(() => topics.find((topic) => topic.id === selectedTopicId) || null, [topics, selectedTopicId]);
+  const activeContent = useMemo(() => contents.find((content) => content.id === selectedContentId) || null, [contents, selectedContentId]);
+  const activeLesson = useMemo(() => lessons.find((lesson) => lesson.id === activeLessonId) || null, [lessons, activeLessonId]);
+
+
+
+  const filteredTopics = useMemo(() => {
+    const key = topicQuery.trim().toLowerCase();
+    if (!key) return topics;
+    return topics.filter((topic) => topic.name.toLowerCase().includes(key));
+  }, [topics, topicQuery]);
+
   const filteredContents = useMemo(() => {
-    const q = contentQuery.trim().toLowerCase();
-    if (!q) return contents;
-    return contents.filter(c => [c.title, c.description || ''].some(v => v.toLowerCase().includes(q)));
+    const key = contentQuery.trim().toLowerCase();
+    if (!key) return contents;
+    return contents.filter((content) => [content.title, content.description || ''].some((value) => value.toLowerCase().includes(key)));
   }, [contents, contentQuery]);
 
-  const handleLogout = async () => {
-    try {
-      await signOutUser();
-      navigate('/admin');
-    } catch (error) {
-      console.error('Error signing out:', error);
+  const lessonsSummary = useMemo(() => {
+    if (lessons.length === 0) return 'Nenhuma aula cadastrada';
+    return `${lessons.length} aula${lessons.length > 1 ? 's' : ''}`;
+  }, [lessons]);
+
+  const openForm = (target: FormTarget) => {
+    setFormTarget(target);
+    if (target.entity === 'topic' && target.mode === 'edit') {
+      setTopicForm({
+        name: target.item.name,
+        category: target.item.category || '',
+        coverImageUrl: target.item.coverImageUrl || '',
+      });
+    } else if (target.entity === 'content' && target.mode === 'edit') {
+      setContentForm({
+        title: target.item.title,
+        description: target.item.description || '',
+        coverImageUrl: target.item.coverImageUrl || '',
+        difficulty: target.item.difficulty || '',
+      });
+    } else if (target.entity === 'lesson' && target.mode === 'edit') {
+      setLessonForm({
+        title: target.item.title,
+        youtubeUrl: target.item.youtubeUrl,
+        description: target.item.description || '',
+      });
+    } else {
+      if (target.entity === 'topic') setTopicForm(createEmptyTopicForm());
+      if (target.entity === 'content') setContentForm(createEmptyContentForm());
+      if (target.entity === 'lesson') setLessonForm(createEmptyLessonForm());
     }
-  }; function handleDragEnd(result: DropResult) {
-    const { source, destination, type } = result;
+  };
+
+  const closeForm = () => {
+    setFormTarget(null);
+  };
+
+  const handleTopicSubmit = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    const categoryKey = (topicForm.category in TOPIC_CATEGORIES ? topicForm.category : 'other') as TopicCategory;
+    const color = getCategoryInfo(categoryKey).color;
+
+    const payload: Partial<Topic> = {
+      name: topicForm.name.trim(),
+      category: categoryKey,
+      color,
+      coverImageUrl: topicForm.coverImageUrl.trim() || undefined,
+    };
+
+    if (!payload.name) return;
+
+    try {
+      if (formTarget?.entity === 'topic' && formTarget.mode === 'edit') {
+        await updateTopic(formTarget.item.id, payload);
+      } else {
+        await createTopic({
+          ...payload,
+          order: topics.length,
+        } as Omit<Topic, 'id' | 'createdAt'>);
+      }
+      closeForm();
+    } catch (error) {
+      console.error('Erro ao salvar tópico:', error);
+    }
+  };
+
+  const handleContentSubmit = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    if (!activeTopic) return;
+
+    const title = contentForm.title.trim();
+    const description = contentForm.description.trim();
+    const coverImageUrl = contentForm.coverImageUrl.trim();
+    const difficulty = contentForm.difficulty in DIFFICULTY_LEVELS
+      ? (contentForm.difficulty as DifficultyLevel)
+      : undefined;
+    const payload: Partial<Content> = {
+      topicId: activeTopic.id,
+      title,
+    };
+
+    if (description) payload.description = description;
+    if (coverImageUrl) payload.coverImageUrl = coverImageUrl;
+    if (difficulty) payload.difficulty = difficulty;
+
+    if (!payload.title) return;
+
+    try {
+      if (formTarget?.entity === 'content' && formTarget.mode === 'edit') {
+        await updateContent(formTarget.item.id, payload);
+      } else {
+        await createContent({
+          ...payload,
+          order: contents.length,
+        } as Omit<Content, 'id' | 'createdAt'>);
+      }
+      closeForm();
+    } catch (error) {
+      console.error('Erro ao salvar curso:', error);
+    }
+  };
+
+  const handleLessonSubmit = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    if (!activeContent) return;
+
+    const payload: Partial<Lesson> = {
+      title: lessonForm.title.trim(),
+      youtubeUrl: lessonForm.youtubeUrl.trim(),
+      description: lessonForm.description.trim() || undefined,
+      contentId: activeContent.id,
+    };
+
+    if (!payload.title || !payload.youtubeUrl) return;
+
+    try {
+      if (formTarget?.entity === 'lesson' && formTarget.mode === 'edit') {
+        await updateLesson(formTarget.item.id, payload);
+      } else {
+        await createLesson({
+          ...payload,
+          order: lessons.length,
+        } as Omit<Lesson, 'id' | 'createdAt'>);
+      }
+      closeForm();
+    } catch (error) {
+      console.error('Erro ao salvar aula:', error);
+    }
+  };
+
+  const handleDragEnd = (result: DropResult) => {
+    const { destination, source, type } = result;
     if (!destination) return;
-    if (source.droppableId === destination.droppableId && source.index === destination.index) return;
+    if (destination.droppableId === source.droppableId && destination.index === source.index) return;
 
     if (type === 'TOPICS') {
-      const next = Array.from(topics);
-      const [m] = next.splice(source.index, 1);
-      next.splice(destination.index, 0, m);
-      setTopics(next);
-      reorderTopics(next.map(t => t.id));
+      const ordered = Array.from(topics);
+      const [moved] = ordered.splice(source.index, 1);
+      ordered.splice(destination.index, 0, moved);
+      setTopics(ordered);
+      reorderTopics(ordered.map((item) => item.id)).catch(console.error);
     }
-    if (type === 'CONTENTS') {
-      const next = Array.from(contents);
-      const [m] = next.splice(source.index, 1);
-      next.splice(destination.index, 0, m);
-      setContents(next);
-      reorderContents(next.map(c => c.id));
-    }
-    if (type === 'LESSONS') {
-      const next = Array.from(lessons);
-      const [m] = next.splice(source.index, 1);
-      next.splice(destination.index, 0, m);
-      setLessons(next);
-      reorderLessons(next.map(l => l.id));
-    }
-  }
 
-  const showContents = !!selectedTopic;
-  const showLessons = !!expandedContentId;
-  const topicsActive = !showContents; // foco está em tópicos
-  const contentsActive = showContents && !showLessons; // foco em conteúdos
+    if (type === 'CONTENTS') {
+      const ordered = Array.from(contents);
+      const [moved] = ordered.splice(source.index, 1);
+      ordered.splice(destination.index, 0, moved);
+      setContents(ordered);
+      reorderContents(ordered.map((item) => item.id)).catch(console.error);
+    }
+
+    if (type === 'LESSONS') {
+      const ordered = Array.from(lessons);
+      const [moved] = ordered.splice(source.index, 1);
+      ordered.splice(destination.index, 0, moved);
+      setLessons(ordered);
+      reorderLessons(ordered.map((item) => item.id)).catch(console.error);
+    }
+  };
+
+  const confirmDeletion = (entry: PendingDelete) => {
+    setPendingDelete(entry);
+  };
+
+  const executeDeletion = async () => {
+    if (!pendingDelete) return;
+
+    try {
+      if (pendingDelete.entity === 'topic') {
+        await deleteTopic(pendingDelete.item.id);
+        if (pendingDelete.item.id === selectedTopicId) {
+          setSelectedTopicId('');
+          setSelectedContentId('');
+          setActiveLessonId('');
+        }
+      }
+
+      if (pendingDelete.entity === 'content') {
+        await deleteContent(pendingDelete.item.id);
+        if (pendingDelete.item.id === selectedContentId) {
+          setSelectedContentId('');
+          setActiveLessonId('');
+        }
+      }
+
+      if (pendingDelete.entity === 'lesson') {
+        await deleteLesson(pendingDelete.item.id);
+        if (pendingDelete.item.id === activeLessonId) {
+          setActiveLessonId('');
+        }
+      }
+    } catch (error) {
+      console.error('Erro ao excluir item:', error);
+    }
+  };
+
+
+
+  const deletionTitle = pendingDelete
+    ? pendingDelete.entity === 'lesson'
+      ? 'Excluir aula'
+      : pendingDelete.entity === 'content'
+        ? 'Excluir curso'
+        : 'Excluir tópico'
+    : '';
+
+  const deletionName = pendingDelete
+    ? pendingDelete.entity === 'topic'
+      ? pendingDelete.item.name
+      : pendingDelete.item.title
+    : '';
 
   return (
-    <div className="min-h-screen bg-transparent text-theme-primary p-6">
-      <div className="w-full max-w-none mx-auto space-y-6">
-        <div className="flex items-center justify-between">
-          <h1 className="text-2xl font-semibold">Gerenciador de Conteúdo</h1>
-          <div className="flex items-center gap-3 mr-24">
-            <a href="/cursos" target="_blank" rel="noopener noreferrer" className="px-3 py-2 rounded-xl text-sm border border-theme text-theme-secondary hover:bg-theme-surface-hover">Ver página pública</a>
-            <a href="/" target="_blank" rel="noopener noreferrer" className="px-3 py-2 rounded-xl text-sm border border-theme text-theme-secondary hover:bg-theme-surface-hover">Ir para o site</a>
-            <span className="text-sm text-theme-secondary">{user?.email}</span>
-            <button onClick={handleLogout} className="px-3 py-2 rounded-xl text-sm btn-primary">Sair</button>
+    <div className="min-h-screen bg-theme-base text-theme-primary">
+      <div className="max-w-[1200px] xl:max-w-[1400px] mx-auto px-6 pt-24 pb-12 space-y-8">
+        <header className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+          <div>
+            <h1 className="text-2xl font-semibold flex items-center gap-2">
+              <LayoutGrid size={20} />
+              Painel de Conteúdo
+            </h1>
+            <p className="text-theme-secondary">Manipule tópicos, cursos e aulas com a mesma experiência da página pública.</p>
           </div>
-        </div>
+        </header>
 
         <DragDropContext onDragEnd={handleDragEnd}>
-          <section className="flex items-stretch gap-3 transition-all">
-            {/* Topics Pane */}
-            <motion.div
-              className="bg-transparent rounded-2xl border border-theme overflow-hidden"
-              initial={{ width: '100%' }}
-              animate={{ width: showContents ? (showLessons ? '20%' : '35%') : '100%' }}
-              transition={{ type: 'spring', stiffness: 120, damping: 18 }}
-            >
-              <div className="flex items-center justify-between px-4 py-3 border-b border-theme gap-2">
-                <h2 className="font-medium truncate">Tópicos</h2>
-                {topicsActive && (
-                  <div className="flex items-center gap-2">
-                    <input
-                      placeholder="Buscar"
-                      className="w-40 px-3 py-2 rounded-xl bg-theme-base border border-theme text-theme-primary"
-                      value={topicQuery}
-                      onChange={(e) => setTopicQuery(e.target.value)}
-                    />
-                    <form className="space-y-3 p-4 bg-theme-surface rounded-xl border border-theme" onSubmit={async (e) => {
-                      e.preventDefault();
-                      if (!newTopicName.trim()) return;
-
-                      const topicData = {
-                        name: newTopicName.trim(),
-                        order: topics.length,
-                        ...(newTopicImageUrl.trim() && { coverImageUrl: newTopicImageUrl.trim() }),
-                        ...(newTopicCategory && { category: newTopicCategory }),
-                      };
-
-                      await createTopic(topicData);
-
-                      setNewTopicName('');
-                      setNewTopicImageUrl('');
-                      setNewTopicCategory('');
-                    }}>
-                      <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                        <input
-                          placeholder="Nome do tópico"
-                          className="px-3 py-2 rounded-xl bg-theme-base border border-theme text-theme-primary"
-                          value={newTopicName}
-                          onChange={(e) => setNewTopicName(e.target.value)}
-                          required
-                        />
-                        <select
-                          className="px-3 py-2 rounded-xl bg-theme-base border border-theme text-theme-primary"
-                          value={newTopicCategory}
-                          onChange={(e) => setNewTopicCategory(e.target.value)}
-                        >
-                          <option value="">Selecione uma categoria</option>
-                          {Object.entries(TOPIC_CATEGORIES).map(([key, cat]) => (
-                            <option key={key} value={key}>{cat.name}</option>
-                          ))}
-                        </select>
-                      </div>
-                      <input
-                        placeholder="URL da imagem de capa (opcional)"
-                        className="w-full px-3 py-2 rounded-xl bg-theme-base border border-theme text-theme-primary"
-                        value={newTopicImageUrl}
-                        onChange={(e) => setNewTopicImageUrl(e.target.value)}
-                        type="url"
-                      />
-                      <button type="submit" className="px-4 py-2 rounded-xl btn-primary flex items-center gap-2">
-                        <Plus size={16} /> Adicionar Tópico
-                      </button>
-                    </form>
-                  </div>
-                )}
+          {activeStage === 'topics' && (
+            <section className="space-y-4">
+              <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+                <div>
+                  <h2 className="text-xl font-semibold">Tópicos</h2>
+                  <p className="text-sm text-theme-secondary">Selecione um tópico para ver seus cursos ou reordene arrastando os cards.</p>
+                </div>
+                <div className="flex flex-wrap items-center gap-2">
+                  <input
+                    placeholder="Buscar tópicos"
+                    value={topicQuery}
+                    onChange={(event) => setTopicQuery(event.target.value)}
+                    className="px-3 py-2 rounded-xl border border-theme bg-theme-base text-sm min-w-[220px]"
+                  />
+                  <button
+                    onClick={() => openForm({ entity: 'topic', mode: 'create' })}
+                    className="px-4 py-2 rounded-xl btn-primary flex items-center gap-2"
+                  >
+                    <Plus size={16} />
+                    Novo tópico
+                  </button>
+                </div>
               </div>
 
-              <Droppable droppableId="topics" type="TOPICS">
-                {(provided) => (
-                  <ul ref={provided.innerRef} {...provided.droppableProps} className="space-y-2 p-2">
-                    {filteredTopics.map((t, index) => (
-                      <Draggable key={t.id} draggableId={t.id} index={index} isDragDisabled={editingTopicId === t.id}>
-                        {(drag) => (
-                          <li ref={drag.innerRef} {...drag.draggableProps} className={`px-3 py-2 flex items-center gap-3 bg-transparent rounded-xl border border-theme hover:bg-theme-surface-hover/30 ${selectedTopic?.id === t.id ? 'is-active' : ''}`}>
-                            <span {...drag.dragHandleProps} className="text-theme-secondary cursor-grab active:cursor-grabbing select-none"><GripVertical size={18} /></span>
-                            {editingTopicId === t.id ? (
-                              <div className="flex-1 space-y-2">
-                                <input
-                                  autoFocus
-                                  className="w-full px-3 py-2 rounded-xl bg-theme-surface border border-theme text-theme-primary"
-                                  placeholder="Nome do tópico"
-                                  value={editingTopicName}
-                                  onChange={(e) => setEditingTopicName(e.target.value)}
+              <Droppable droppableId="admin-topics" direction="horizontal" type="TOPICS">
+                {(droppableProvided) => (
+                  <div
+                    ref={droppableProvided.innerRef}
+                    {...droppableProvided.droppableProps}
+                    className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4"
+                  >
+                    {filteredTopics.map((topic, index) => {
+                      const categoryInfo = getCategoryInfo(topic.category);
+                      return (
+                        <Draggable draggableId={topic.id} index={index} key={topic.id}>
+                          {(provided) => (
+                            <div
+                              ref={provided.innerRef}
+                              {...provided.draggableProps}
+                              {...provided.dragHandleProps}
+                              className={`group relative overflow-hidden rounded-2xl border bg-theme-surface text-left hover:shadow-lg cursor-grab active:cursor-grabbing ${selectedTopicId === topic.id
+                                ? 'ring-2 ring-blue-500 border-blue-500'
+                                : 'border-theme hover:border-gray-300'
+                                }`}
+                              onClick={() => {
+                                setSelectedTopicId(topic.id);
+                                setSelectedContentId('');
+                                setActiveLessonId('');
+                              }}
+                            >
+                              <div className="relative">
+                                <CourseImage
+                                  src={topic.coverImageUrl}
+                                  alt={topic.name}
+                                  fallbackColor={topic.color || generateColorFromString(topic.name)}
+                                  fallbackIcon={categoryInfo.icon}
+                                  aspectRatio="video"
+                                  className="group-hover:scale-105 transition-transform duration-300"
                                 />
-                                <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
-                                  <input
-                                    className="px-3 py-2 rounded-xl bg-theme-surface border border-theme text-theme-primary text-sm"
-                                    placeholder="URL da imagem (opcional)"
-                                    value={editingTopicImageUrl}
-                                    onChange={(e) => setEditingTopicImageUrl(e.target.value)}
-                                    type="url"
-                                  />
-                                  <select
-                                    className="px-3 py-2 rounded-xl bg-theme-surface border border-theme text-theme-primary text-sm"
-                                    value={editingTopicCategory}
-                                    onChange={(e) => setEditingTopicCategory(e.target.value)}
+
+                                <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-black/20 to-transparent rounded-xl" />
+
+                                <div
+                                  className="absolute top-3 right-3 px-2 py-1 rounded-full text-xs font-medium text-white backdrop-blur-sm flex items-center gap-1"
+                                  style={{ backgroundColor: categoryInfo.color + '90' }}
+                                >
+                                  <CategoryIcon Icon={categoryInfo.icon} size={12} />
+                                  <span>{categoryInfo.name}</span>
+                                </div>
+
+                                <div className="absolute top-3 left-3 flex gap-2">
+                                  <button
+                                    type="button"
+                                    onClick={(event) => {
+                                      event.stopPropagation();
+                                      openForm({ entity: 'topic', mode: 'edit', item: topic });
+                                    }}
+                                    className="inline-flex h-8 w-8 items-center justify-center rounded-full bg-black/40 text-white/80 hover:bg-black/60 backdrop-blur-sm"
                                   >
-                                    <option value="">Categoria (opcional)</option>
-                                    {Object.entries(TOPIC_CATEGORIES).map(([key, cat]) => (
-                                      <option key={key} value={key}>{cat.name}</option>
-                                    ))}
-                                  </select>
+                                    <Pencil size={14} />
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={(event) => {
+                                      event.stopPropagation();
+                                      confirmDeletion({ entity: 'topic', item: topic });
+                                    }}
+                                    className="inline-flex h-8 w-8 items-center justify-center rounded-full bg-red-500/70 text-white hover:bg-red-500 backdrop-blur-sm"
+                                  >
+                                    <Trash2 size={14} />
+                                  </button>
+                                </div>
+
+                                <div className="absolute bottom-0 left-0 right-0 p-4">
+                                  <h3 className="font-semibold text-white text-lg leading-tight">{topic.name}</h3>
                                 </div>
                               </div>
-                            ) : (
-                              <button className="flex-1 text-left font-medium truncate hover:underline" onClick={() => { setSelectedTopic(t); setExpandedContentId(null); }}>
-                                {t.name}
-                              </button>
-                            )}
-                            {editingTopicId === t.id ? (
-                              <>
-                                <button className="px-3 py-2 rounded-xl border border-theme" onClick={() => {
-                                  setEditingTopicId(null);
-                                  setEditingTopicName('');
-                                  setEditingTopicImageUrl('');
-                                  setEditingTopicCategory('');
-                                }}>Cancelar</button>
-                                <button className="px-3 py-2 rounded-xl btn-primary" onClick={async () => {
-                                  const updateData: Partial<Topic> = { name: editingTopicName };
-                                  if (editingTopicImageUrl.trim()) updateData.coverImageUrl = editingTopicImageUrl.trim();
-                                  if (editingTopicCategory) updateData.category = editingTopicCategory;
-                                  await updateTopic(t.id, updateData);
-                                  setEditingTopicId(null);
-                                  setEditingTopicName('');
-                                  setEditingTopicImageUrl('');
-                                  setEditingTopicCategory('');
-                                }}>Salvar</button>
-                              </>
-                            ) : topicsActive ? (
-                              <>
-                                <button className="px-3 py-2 rounded-xl border border-theme flex items-center gap-2" onClick={() => {
-                                  setEditingTopicId(t.id);
-                                  setEditingTopicName(t.name);
-                                  setEditingTopicImageUrl(t.coverImageUrl || '');
-                                  setEditingTopicCategory(t.category || '');
-                                }}><Pencil size={16} /> Editar</button>
-                                <button className="px-3 py-2 rounded-xl border border-theme text-red-500 flex items-center gap-2" onClick={() => openConfirmDialog('Excluir Tópico', `Tem certeza que deseja excluir o tópico "${t.name}"? Esta ação não pode ser desfeita.`, async () => await deleteTopic(t.id))}><Trash2 size={16} /> Excluir</button>
-                              </>
-                            ) : null}
-                          </li>
-                        )}
-                      </Draggable>
-                    ))}
-                    {provided.placeholder}
-                  </ul>
+                            </div>
+                          )}
+                        </Draggable>
+                      );
+                    })}
+                    {droppableProvided.placeholder}
+                  </div>
                 )}
               </Droppable>
-            </motion.div>
+            </section>
+          )}
 
-            {showContents && (
-              <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="w-6 grid place-items-center text-theme-secondary">
-                <ChevronRight />
-              </motion.div>
-            )}
-
-            {/* Contents Pane */}
-            <motion.div
-              className="bg-transparent rounded-2xl border border-theme overflow-hidden"
-              initial={{ width: 0 }}
-              animate={{ width: showContents ? (showLessons ? '28%' : '65%') : 0 }}
-              transition={{ type: 'spring', stiffness: 120, damping: 18 }}
-            >
-              {showContents && (
-                <div className="flex flex-col h-full">
-                  <div className="flex items-center justify-between px-4 py-3 border-b border-theme">
-                    <div className="flex items-center gap-2">
-                      <button onClick={() => { setSelectedTopic(null); setExpandedContentId(null); }} className="px-3 py-2 rounded-xl btn-soft flex items-center gap-2"><ArrowLeft size={16} /> Voltar</button>
-                      <h2 className="font-medium truncate">{selectedTopicName}</h2>
-                    </div>
-                    <div className="text-sm text-theme-secondary">Conteúdos</div>
-                  </div>
-
-                  <div className="p-4 space-y-3">
-                    {contentsActive && (
-                      <form className="space-y-3 p-4 bg-theme-base rounded-xl border border-theme" onSubmit={async (e) => {
-                        e.preventDefault();
-                        if (!newContentTitle.trim()) return;
-
-                        const contentData = {
-                          topicId: selectedTopic!.id,
-                          title: newContentTitle.trim(),
-                          order: contents.length,
-                          ...(newContentDesc.trim() && { description: newContentDesc.trim() }),
-                          ...(newContentImageUrl.trim() && { coverImageUrl: newContentImageUrl.trim() }),
-                          ...(newContentDifficulty && { difficulty: newContentDifficulty as 'beginner' | 'intermediate' | 'advanced' }),
-                          ...(newContentDuration && { estimatedDuration: parseInt(newContentDuration) }),
-                        };
-
-                        await createContent(contentData);
-                        setNewContentTitle('');
-                        setNewContentDesc('');
-                        setNewContentImageUrl('');
-                        setNewContentDifficulty('');
-                        setNewContentDuration('');
-                      }}>
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                          <input
-                            placeholder="Título do conteúdo"
-                            className="px-3 py-2 rounded-xl bg-theme-surface border border-theme text-theme-primary"
-                            value={newContentTitle}
-                            onChange={(e) => setNewContentTitle(e.target.value)}
-                            required
-                          />
-                          <select
-                            className="px-3 py-2 rounded-xl bg-theme-surface border border-theme text-theme-primary"
-                            value={newContentDifficulty}
-                            onChange={(e) => setNewContentDifficulty(e.target.value)}
-                          >
-                            <option value="">Selecione a dificuldade</option>
-                            {Object.entries(DIFFICULTY_LEVELS).map(([key, level]) => (
-                              <option key={key} value={key}>{level.name}</option>
-                            ))}
-                          </select>
-                        </div>
-                        <input
-                          placeholder="Descrição (opcional)"
-                          className="w-full px-3 py-2 rounded-xl bg-theme-surface border border-theme text-theme-primary"
-                          value={newContentDesc}
-                          onChange={(e) => setNewContentDesc(e.target.value)}
-                        />
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                          <input
-                            placeholder="URL da imagem de capa (opcional)"
-                            className="px-3 py-2 rounded-xl bg-theme-surface border border-theme text-theme-primary"
-                            value={newContentImageUrl}
-                            onChange={(e) => setNewContentImageUrl(e.target.value)}
-                            type="url"
-                          />
-                          <input
-                            placeholder="Duração em minutos (opcional)"
-                            className="px-3 py-2 rounded-xl bg-theme-surface border border-theme text-theme-primary"
-                            value={newContentDuration}
-                            onChange={(e) => setNewContentDuration(e.target.value)}
-                            type="number"
-                            min="1"
-                          />
-                        </div>
-                        <button type="submit" className="px-4 py-2 rounded-xl btn-primary flex items-center gap-2">
-                          <Plus size={16} /> Adicionar Conteúdo
-                        </button>
-                      </form>
-                    )}
-
-                    {/* Busca em conteúdos */}
-                    {contentsActive && (
-                      <input
-                        placeholder="Buscar conteúdos"
-                        className="w-full px-3 py-2 rounded-xl bg-theme-base border border-theme text-theme-primary"
-                        value={contentQuery}
-                        onChange={(e) => setContentQuery(e.target.value)}
-                      />
-                    )}
-
-                    <Droppable droppableId="contents" type="CONTENTS">
-                      {(provided) => (
-                        <ul ref={provided.innerRef} {...provided.droppableProps} className="space-y-2 p-2">
-                          {filteredContents.map((c, index) => (
-                            <Draggable key={c.id} draggableId={c.id} index={index} isDragDisabled={editingContentId === c.id}>
-                              {(drag) => (
-                                <li ref={drag.innerRef} {...drag.draggableProps} className={`px-3 py-2 flex items-center gap-3 bg-transparent rounded-xl border border-theme hover:bg-theme-surface-hover/30 ${expandedContentId === c.id ? 'is-active' : ''}`}>
-                                  <span {...drag.dragHandleProps} className="text-theme-secondary cursor-grab active:cursor-grabbing select-none"><GripVertical size={18} /></span>
-                                  {editingContentId === c.id ? (
-                                    <div className="flex-1 space-y-2">
-                                      <input
-                                        className="w-full px-3 py-2 rounded-xl bg-theme-surface border border-theme text-theme-primary"
-                                        placeholder="Título do conteúdo"
-                                        value={editingContentTitle}
-                                        onChange={(e) => setEditingContentTitle(e.target.value)}
-                                      />
-                                      <input
-                                        className="w-full px-3 py-2 rounded-xl bg-theme-surface border border-theme text-theme-primary"
-                                        placeholder="Descrição (opcional)"
-                                        value={editingContentDesc}
-                                        onChange={(e) => setEditingContentDesc(e.target.value)}
-                                      />
-                                      <div className="grid grid-cols-1 md:grid-cols-3 gap-2">
-                                        <input
-                                          className="px-3 py-2 rounded-xl bg-theme-surface border border-theme text-theme-primary text-sm"
-                                          placeholder="URL da imagem (opcional)"
-                                          value={editingContentImageUrl}
-                                          onChange={(e) => setEditingContentImageUrl(e.target.value)}
-                                          type="url"
-                                        />
-                                        <select
-                                          className="px-3 py-2 rounded-xl bg-theme-surface border border-theme text-theme-primary text-sm"
-                                          value={editingContentDifficulty}
-                                          onChange={(e) => setEditingContentDifficulty(e.target.value)}
-                                        >
-                                          <option value="">Dificuldade (opcional)</option>
-                                          {Object.entries(DIFFICULTY_LEVELS).map(([key, level]) => (
-                                            <option key={key} value={key}>{level.name}</option>
-                                          ))}
-                                        </select>
-                                        <input
-                                          className="px-3 py-2 rounded-xl bg-theme-surface border border-theme text-theme-primary text-sm"
-                                          placeholder="Duração (min)"
-                                          value={editingContentDuration}
-                                          onChange={(e) => setEditingContentDuration(e.target.value)}
-                                          type="number"
-                                          min="1"
-                                        />
-                                      </div>
-                                    </div>
-                                  ) : (
-                                    <button className="flex-1 text-left" onClick={() => setExpandedContentId(c.id)}>
-                                      <div className="font-medium truncate">{c.title}</div>
-                                      {c.description && <div className="text-sm text-theme-secondary">{c.description}</div>}
-                                    </button>
-                                  )}
-                                  <div className="flex gap-2 ml-auto">
-                                    {editingContentId === c.id ? (
-                                      <>
-                                        <button className="px-3 py-2 rounded-xl border border-theme" onClick={() => {
-                                          setEditingContentId(null);
-                                          setEditingContentTitle('');
-                                          setEditingContentDesc('');
-                                          setEditingContentImageUrl('');
-                                          setEditingContentDifficulty('');
-                                          setEditingContentDuration('');
-                                        }}>Cancelar</button>
-                                        <button className="px-3 py-2 rounded-xl btn-primary" onClick={async () => {
-                                          const updateData: Partial<Content> = {
-                                            title: editingContentTitle,
-                                            description: editingContentDesc || undefined
-                                          };
-                                          if (editingContentImageUrl.trim()) updateData.coverImageUrl = editingContentImageUrl.trim();
-                                          if (editingContentDifficulty) updateData.difficulty = editingContentDifficulty as 'beginner' | 'intermediate' | 'advanced';
-                                          if (editingContentDuration) updateData.estimatedDuration = parseInt(editingContentDuration);
-                                          await updateContent(c.id, updateData);
-                                          setEditingContentId(null);
-                                          setEditingContentTitle('');
-                                          setEditingContentDesc('');
-                                          setEditingContentImageUrl('');
-                                          setEditingContentDifficulty('');
-                                          setEditingContentDuration('');
-                                        }}>Salvar</button>
-                                      </>
-                                    ) : contentsActive ? (
-                                      <>
-                                        <button className="px-3 py-2 rounded-xl border border-theme" onClick={() => {
-                                          setEditingContentId(c.id);
-                                          setEditingContentTitle(c.title);
-                                          setEditingContentDesc(c.description || '');
-                                          setEditingContentImageUrl(c.coverImageUrl || '');
-                                          setEditingContentDifficulty(c.difficulty || '');
-                                          setEditingContentDuration(c.estimatedDuration ? c.estimatedDuration.toString() : '');
-                                        }}>Editar</button>
-                                        <button className="px-3 py-2 rounded-xl border border-theme text-red-500" onClick={() => openConfirmDialog('Excluir Conteúdo', `Tem certeza que deseja excluir o conteúdo "${c.title}"? Esta ação não pode ser desfeita.`, async () => await deleteContent(c.id))}>Excluir</button>
-                                      </>
-                                    ) : null}
-                                  </div>
-                                </li>
-                              )}
-                            </Draggable>
-                          ))}
-                          {provided.placeholder}
-                        </ul>
-                      )}
-                    </Droppable>
-                  </div>
+          {activeStage === 'contents' && activeTopic && (
+            <section className="space-y-4">
+              <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+                <div className="flex items-center gap-2 text-sm text-theme-secondary">
+                  <button
+                    onClick={() => {
+                      setSelectedTopicId('');
+                      setSelectedContentId('');
+                      setActiveLessonId('');
+                    }}
+                    className="text-blue-500 hover:text-blue-600 flex items-center gap-1"
+                  >
+                    <ArrowLeft size={14} />
+                    Tópicos
+                  </button>
+                  <ChevronRight size={14} />
+                  <span className="text-theme-primary font-medium">{activeTopic.name}</span>
                 </div>
-              )}
-            </motion.div>
+                <div className="flex flex-wrap items-center gap-2">
+                  <input
+                    placeholder="Buscar cursos"
+                    value={contentQuery}
+                    onChange={(event) => setContentQuery(event.target.value)}
+                    className="px-3 py-2 rounded-xl border border-theme bg-theme-base text-sm min-w-[220px]"
+                  />
+                  <button
+                    onClick={() => openForm({ entity: 'content', mode: 'create' })}
+                    className="px-4 py-2 rounded-xl btn-primary flex items-center gap-2"
+                  >
+                    <Plus size={16} />
+                    Novo curso
+                  </button>
+                </div>
+              </div>
 
-            {showLessons && (
-              <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="w-6 grid place-items-center text-theme-secondary">
-                <ChevronRight />
-              </motion.div>
-            )}
+              <Droppable droppableId="admin-contents" type="CONTENTS">
+                {(droppableProvided) => (
+                  <div
+                    ref={droppableProvided.innerRef}
+                    {...droppableProvided.droppableProps}
+                    className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6"
+                  >
+                    {filteredContents.map((content, index) => {
+                      const difficulty = getDifficultyInfo(content.difficulty);
+                      return (
+                        <Draggable draggableId={content.id} index={index} key={content.id}>
+                          {(provided) => (
+                            <div
+                              ref={provided.innerRef}
+                              {...provided.draggableProps}
+                              {...provided.dragHandleProps}
+                              className={`group relative overflow-hidden rounded-2xl border bg-theme-surface text-left hover:shadow-lg cursor-grab active:cursor-grabbing ${selectedContentId === content.id
+                                ? 'ring-2 ring-blue-500 border-blue-500'
+                                : 'border-theme hover:border-gray-300'
+                                }`}
+                              onClick={() => {
+                                setSelectedContentId(content.id);
+                                setActiveLessonId('');
+                              }}
+                            >
+                              <div className="relative overflow-hidden">
+                                <CourseImage
+                                  src={content.coverImageUrl}
+                                  alt={content.title}
+                                  fallbackColor={generateColorFromString(content.title)}
+                                  fallbackIcon={difficulty.icon}
+                                  aspectRatio="video"
+                                  className="group-hover:scale-105 transition-transform duration-300"
+                                />
 
-            {/* Lessons Pane */}
-            <motion.div
-              className="bg-transparent rounded-2xl border border-theme overflow-hidden"
-              initial={{ width: 0 }}
-              animate={{ width: showLessons ? '52%' : 0 }}
-              transition={{ type: 'spring', stiffness: 120, damping: 18 }}
-            >
-              {showLessons && (
-                <div className="p-4 space-y-3">
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-2">
-                      <button onClick={() => setExpandedContentId(null)} className="px-3 py-2 rounded-xl btn-soft flex items-center gap-2"><ArrowLeft size={16} /> Voltar</button>
-                      <h3 className="font-medium truncate">Aulas de "{expandedContentTitle}"</h3>
-                    </div>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        const next = addingLessonForId === expandedContentId ? null : expandedContentId;
-                        setAddingLessonForId(next);
-                        if (next) { setNewLessonTitle(''); setNewLessonUrl(''); }
-                      }}
-                      className="px-3 py-1.5 rounded-xl border border-theme flex items-center gap-2 hover:bg-theme-surface-hover"
-                    >
-                      <Plus size={16} /> {addingLessonForId === expandedContentId ? 'Fechar' : 'Adicionar aula'}
-                    </button>
-                  </div>
+                                <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-black/20 to-transparent rounded-xl" />
 
-                  {addingLessonForId === expandedContentId && (
-                    <form className="flex flex-col sm:flex-row gap-2" onSubmit={async (e) => {
-                      e.preventDefault();
-                      if (!newLessonTitle.trim() || !newLessonUrl.trim()) return;
-                      await createLesson({ contentId: expandedContentId!, title: newLessonTitle.trim(), youtubeUrl: newLessonUrl.trim(), order: lessons.length });
-                      setNewLessonTitle(''); setNewLessonUrl('');
-                      setAddingLessonForId(null);
-                    }}>
-                      <input placeholder="Título da aula" className="flex-1 px-3 py-2 rounded-xl bg-theme-base border border-theme text-theme-primary" value={newLessonTitle} onChange={(e) => setNewLessonTitle(e.target.value)} />
-                      <input placeholder="Link do YouTube" className="flex-1 px-3 py-2 rounded-xl bg-theme-base border border-theme text-theme-primary" value={newLessonUrl} onChange={(e) => setNewLessonUrl(e.target.value)} />
-                      <button className="px-3 py-2 rounded-xl btn-primary">Adicionar</button>
-                    </form>
-                  )}
+                                <div
+                                  className="absolute top-3 right-3 px-2 py-1 rounded-full text-xs font-medium text-white backdrop-blur-sm flex items-center gap-1"
+                                  style={{ backgroundColor: difficulty.color + '90' }}
+                                >
+                                  <CategoryIcon Icon={difficulty.icon} size={12} />
+                                  <span>{difficulty.name}</span>
+                                </div>
 
-                  <Droppable droppableId="lessons" type="LESSONS">
-                    {(p2) => (
-                      <ul ref={p2.innerRef} {...p2.droppableProps} className="space-y-2 p-2">
-                        {lessons.map((l, idx) => (
-                          <Draggable key={l.id} draggableId={l.id} index={idx} isDragDisabled={editingLessonId === l.id}>
-                            {(drag2) => (
-                              <li ref={drag2.innerRef} {...drag2.draggableProps} className="px-3 py-2 flex items-center gap-3 bg-transparent rounded-xl border border-theme hover:bg-theme-surface-hover/30">
-                                <span {...drag2.dragHandleProps} className="text-theme-secondary cursor-grab active:cursor-grabbing select-none"><GripVertical size={18} /></span>
-                                {editingLessonId === l.id ? (
-                                  <div className="flex-1 flex gap-2">
-                                    <input className="w-full px-3 py-2 rounded-xl bg-theme-surface border border-theme text-theme-primary" value={editingLessonTitle} onChange={(e) => setEditingLessonTitle(e.target.value)} />
-                                    <input className="w-full px-3 py-2 rounded-xl bg-theme-surface border border-theme text-theme-primary" value={editingLessonUrl} onChange={(e) => setEditingLessonUrl(e.target.value)} />
-                                    <div className="flex gap-2">
-                                      <button className="px-3 py-2 rounded-xl border border-theme" onClick={() => setEditingLessonId(null)}>Cancelar</button>
-                                      <button className="px-3 py-2 rounded-xl btn-primary" onClick={async () => { await updateLesson(l.id, { title: editingLessonTitle, youtubeUrl: editingLessonUrl }); setEditingLessonId(null); }}>Salvar</button>
-                                    </div>
-                                  </div>
-                                ) : (
-                                  <div className="flex items-center justify-between gap-2 w-full">
-                                    <div className="min-w-0">
-                                      <div className="font-medium truncate">{idx + 1}. {l.title}</div>
-                                      <div className="text-sm text-theme-secondary truncate max-w-[50ch]">{l.youtubeUrl}</div>
-                                    </div>
-                                    <div className="flex gap-2 ml-auto">
-                                      <button className="px-3 py-2 rounded-xl border border-theme flex items-center gap-2" onClick={() => { setEditingLessonId(l.id); setEditingLessonTitle(l.title); setEditingLessonUrl(l.youtubeUrl); }}>
-                                        <Pencil size={16} /> Editar
-                                      </button>
-                                      <button className="px-3 py-2 rounded-xl border border-theme text-red-500 flex items-center gap-2" onClick={() => openConfirmDialog('Excluir Aula', `Tem certeza que deseja excluir a aula "${l.title}"? Esta ação não pode ser desfeita.`, async () => await deleteLesson(l.id))}>
-                                        <Trash2 size={16} /> Excluir
-                                      </button>
-                                    </div>
-                                  </div>
+
+
+                                <div className="absolute bottom-3 right-3 flex gap-2">
+                                  <button
+                                    onClick={(event) => {
+                                      event.stopPropagation();
+                                      openForm({ entity: 'content', mode: 'edit', item: content });
+                                    }}
+                                    className="inline-flex h-8 w-8 items-center justify-center rounded-full bg-black/40 text-white/80 hover:bg-black/60 backdrop-blur-sm"
+                                  >
+                                    <Pencil size={14} />
+                                  </button>
+                                  <button
+                                    onClick={(event) => {
+                                      event.stopPropagation();
+                                      confirmDeletion({ entity: 'content', item: content });
+                                    }}
+                                    className="inline-flex h-8 w-8 items-center justify-center rounded-full bg-red-500/70 text-white hover:bg-red-500 backdrop-blur-sm"
+                                  >
+                                    <Trash2 size={14} />
+                                  </button>
+                                </div>
+                              </div>
+
+                              <div className="p-4 space-y-2">
+                                <h3 className="font-semibold text-base leading-tight line-clamp-2">{content.title}</h3>
+                                {content.description && (
+                                  <p className="text-sm text-theme-secondary line-clamp-3">{content.description}</p>
                                 )}
-                              </li>
+                              </div>
+                            </div>
+                          )}
+                        </Draggable>
+                      );
+                    })}
+                    {droppableProvided.placeholder}
+                  </div>
+                )}
+              </Droppable>
+            </section>
+          )}
+
+          {activeStage === 'lessons' && activeTopic && activeContent && (
+            <section className="space-y-4">
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <div className="flex items-center gap-2 text-sm text-theme-secondary">
+                  <button
+                    onClick={() => {
+                      setSelectedContentId('');
+                      setActiveLessonId('');
+                    }}
+                    className="text-blue-500 hover:text-blue-600 flex items-center gap-1"
+                  >
+                    <ArrowLeft size={14} />
+                    {activeTopic.name}
+                  </button>
+                  <ChevronRight size={14} />
+                  <span className="text-theme-primary font-medium">{activeContent.title}</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <span className="text-sm text-theme-secondary">{lessonsSummary}</span>
+                  <button
+                    onClick={() => openForm({ entity: 'lesson', mode: 'create' })}
+                    className="px-4 py-2 rounded-xl btn-primary flex items-center gap-2"
+                  >
+                    <Plus size={16} />
+                    Nova aula
+                  </button>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 xl:grid-cols-3 gap-4">
+                <div className="xl:col-span-2 space-y-3">
+                  <div className="rounded-2xl border border-theme p-1 bg-theme-surface">
+                    {activeLesson ? (
+                      <YouTubePlayer
+                        url={activeLesson.youtubeUrl}
+                        title={activeLesson.title}
+                        lessonId={activeLesson.id}
+                        contentId={activeContent.id}
+                        topicId={activeTopic.id}
+                        contentTitle={activeContent.title}
+                        topicTitle={activeTopic.name}
+                      />
+                    ) : (
+                      <div className="aspect-video w-full rounded-xl bg-theme-base grid place-items-center text-theme-muted">
+                        Selecione uma aula
+                      </div>
+                    )}
+                  </div>
+                  {activeLesson && (
+                    <div className="rounded-xl border border-theme bg-theme-surface px-4 py-3 flex flex-wrap items-center justify-between gap-3">
+                      <div>
+                        <div className="font-medium text-theme-primary">{activeLesson.title}</div>
+                        <div className="text-xs text-theme-secondary flex items-center gap-2">
+                          <Video size={14} className="text-red-500" />
+                          {activeLesson.youtubeUrl}
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <button
+                          onClick={() => openForm({ entity: 'lesson', mode: 'edit', item: activeLesson })}
+                          className="px-3 py-2 rounded-xl border border-theme text-theme-secondary hover:text-theme-primary"
+                        >
+                          Editar aula
+                        </button>
+                        <button
+                          onClick={() => confirmDeletion({ entity: 'lesson', item: activeLesson })}
+                          className="px-3 py-2 rounded-xl border border-red-500 text-red-500 hover:bg-red-500/10"
+                        >
+                          Remover
+                        </button>
+                      </div>
+                    </div>
+                  )}
+                </div>
+                <aside className="rounded-2xl border border-theme bg-theme-surface p-4">
+                  <h3 className="font-medium mb-3 flex items-center gap-2">
+                    <BookOpen size={16} />
+                    Aulas do curso
+                  </h3>
+                  <Droppable droppableId="admin-lessons" type="LESSONS">
+                    {(droppableProvided) => (
+                      <div ref={droppableProvided.innerRef} {...droppableProvided.droppableProps} className="space-y-2">
+                        {lessons.map((lesson, index) => (
+                          <Draggable draggableId={lesson.id} index={index} key={lesson.id}>
+                            {(provided) => (
+                              <div
+                                ref={provided.innerRef}
+                                {...provided.draggableProps}
+                                {...provided.dragHandleProps}
+                                className={`p-3 rounded-xl border ${lesson.id === activeLessonId ? 'border-blue-500 bg-blue-500/5' : 'border-theme bg-theme-base'} cursor-grab active:cursor-grabbing transition-colors`}
+                                onClick={() => setActiveLessonId(lesson.id)}
+                              >
+                                <div className="text-sm font-medium text-theme-primary">{lesson.title}</div>
+                                <div className="text-xs text-theme-secondary line-clamp-2">{lesson.description || 'Sem descrição'}</div>
+                              </div>
                             )}
                           </Draggable>
                         ))}
-                        {p2.placeholder}
-                      </ul>
+                        {droppableProvided.placeholder}
+                      </div>
                     )}
                   </Droppable>
-                </div>
-              )}
-            </motion.div>
-          </section>
+                </aside>
+              </div>
+            </section>
+          )}
         </DragDropContext>
       </div>
 
+      {formTarget?.entity === 'topic' && (
+        <AdminModal
+          isOpen={!!formTarget}
+          onClose={closeForm}
+          title={formTarget.mode === 'edit' ? 'Editar Tópico' : 'Novo Tópico'}
+          subtitle="Ajuste título, categoria e capa exibidos na página pública"
+          onSubmit={handleTopicSubmit}
+          submitLabel="Tópico"
+          isEdit={formTarget.mode === 'edit'}
+        >
+          <div className="space-y-4">
+            <label className="block">
+              <span className="text-sm font-medium text-theme-primary mb-2 block">Nome</span>
+              <input
+                required
+                value={topicForm.name}
+                onChange={(event) => setTopicForm((prev) => ({ ...prev, name: event.target.value }))}
+                className="w-full rounded-xl border border-theme bg-theme-base px-4 py-3 text-theme-primary focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                placeholder="Digite o nome do tópico"
+              />
+            </label>
+
+            <label className="block">
+              <span className="text-sm font-medium text-theme-primary mb-2 block">Categoria</span>
+              <select
+                value={topicForm.category}
+                onChange={(event) => setTopicForm((prev) => ({ ...prev, category: event.target.value }))}
+                className="w-full rounded-xl border border-theme bg-theme-base px-4 py-3 text-theme-primary focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+              >
+                <option value="">Selecione uma categoria</option>
+                {Object.entries(TOPIC_CATEGORIES).map(([key, info]) => (
+                  <option value={key} key={key}>{info.name}</option>
+                ))}
+              </select>
+            </label>
+
+            <label className="block">
+              <span className="text-sm font-medium text-theme-primary mb-2 block">Imagem de Capa</span>
+              <input
+                value={topicForm.coverImageUrl}
+                onChange={(event) => setTopicForm((prev) => ({ ...prev, coverImageUrl: event.target.value }))}
+                className="w-full rounded-xl border border-theme bg-theme-base px-4 py-3 text-theme-primary focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                placeholder="https://exemplo.com/imagem.jpg"
+              />
+              <p className="text-xs text-theme-secondary mt-1">URL da imagem que será exibida como capa do tópico</p>
+            </label>
+          </div>
+        </AdminModal>
+      )}
+
+      {formTarget?.entity === 'content' && (
+        <AdminModal
+          isOpen={!!formTarget}
+          onClose={closeForm}
+          title={formTarget.mode === 'edit' ? 'Editar Curso' : 'Novo Curso'}
+          subtitle="Defina título, descrição, capa e dificuldade para o curso"
+          onSubmit={handleContentSubmit}
+          submitLabel="Curso"
+          isEdit={formTarget.mode === 'edit'}
+        >
+          <div className="space-y-4">
+            <label className="block">
+              <span className="text-sm font-medium text-theme-primary mb-2 block">Título</span>
+              <input
+                required
+                value={contentForm.title}
+                onChange={(event) => setContentForm((prev) => ({ ...prev, title: event.target.value }))}
+                className="w-full rounded-xl border border-theme bg-theme-base px-4 py-3 text-theme-primary focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                placeholder="Digite o título do curso"
+              />
+            </label>
+
+            <label className="block">
+              <span className="text-sm font-medium text-theme-primary mb-2 block">Descrição</span>
+              <textarea
+                rows={4}
+                value={contentForm.description}
+                onChange={(event) => setContentForm((prev) => ({ ...prev, description: event.target.value }))}
+                className="w-full rounded-xl border border-theme bg-theme-base px-4 py-3 text-theme-primary focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent resize-none"
+                placeholder="Descreva o conteúdo do curso"
+              />
+            </label>
+
+            <label className="block">
+              <span className="text-sm font-medium text-theme-primary mb-2 block">Dificuldade</span>
+              <select
+                value={contentForm.difficulty}
+                onChange={(event) => setContentForm((prev) => ({ ...prev, difficulty: event.target.value }))}
+                className="w-full rounded-xl border border-theme bg-theme-base px-4 py-3 text-theme-primary focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+              >
+                <option value="">Selecione a dificuldade</option>
+                {Object.entries(DIFFICULTY_LEVELS).map(([key, info]) => (
+                  <option value={key} key={key}>{info.name}</option>
+                ))}
+              </select>
+            </label>
+
+            <label className="block">
+              <span className="text-sm font-medium text-theme-primary mb-2 block">Imagem de Capa</span>
+              <input
+                value={contentForm.coverImageUrl}
+                onChange={(event) => setContentForm((prev) => ({ ...prev, coverImageUrl: event.target.value }))}
+                className="w-full rounded-xl border border-theme bg-theme-base px-4 py-3 text-theme-primary focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                placeholder="https://exemplo.com/imagem.jpg"
+              />
+            </label>
+          </div>
+        </AdminModal>
+      )}
+
+      {formTarget?.entity === 'lesson' && (
+        <AdminModal
+          isOpen={!!formTarget}
+          onClose={closeForm}
+          title={formTarget.mode === 'edit' ? 'Editar Aula' : 'Nova Aula'}
+          subtitle="Adicione vídeos do YouTube e notas complementares para cada aula"
+          onSubmit={handleLessonSubmit}
+          submitLabel="Aula"
+          isEdit={formTarget.mode === 'edit'}
+        >
+          <div className="space-y-4">
+            <label className="block">
+              <span className="text-sm font-medium text-theme-primary mb-2 block">Título</span>
+              <input
+                required
+                value={lessonForm.title}
+                onChange={(event) => setLessonForm((prev) => ({ ...prev, title: event.target.value }))}
+                className="w-full rounded-xl border border-theme bg-theme-base px-4 py-3 text-theme-primary focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                placeholder="Digite o título da aula"
+              />
+            </label>
+
+            <label className="block">
+              <span className="text-sm font-medium text-theme-primary mb-2 block">URL do YouTube</span>
+              <input
+                required
+                value={lessonForm.youtubeUrl}
+                onChange={(event) => setLessonForm((prev) => ({ ...prev, youtubeUrl: event.target.value }))}
+                className="w-full rounded-xl border border-theme bg-theme-base px-4 py-3 text-theme-primary focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                placeholder="https://www.youtube.com/watch?v=..."
+              />
+              <p className="text-xs text-theme-secondary mt-1">Cole o link do vídeo do YouTube</p>
+            </label>
+
+            <label className="block">
+              <span className="text-sm font-medium text-theme-primary mb-2 block">Descrição</span>
+              <textarea
+                rows={3}
+                value={lessonForm.description}
+                onChange={(event) => setLessonForm((prev) => ({ ...prev, description: event.target.value }))}
+                className="w-full rounded-xl border border-theme bg-theme-base px-4 py-3 text-theme-primary focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent resize-none"
+                placeholder="Descreva o conteúdo da aula (opcional)"
+              />
+            </label>
+          </div>
+        </AdminModal>
+      )}
+
       <ConfirmDialog
-        isOpen={confirmDialog.isOpen}
-        onClose={closeConfirmDialog}
-        onConfirm={confirmDialog.onConfirm}
-        title={confirmDialog.title}
-        message={confirmDialog.message}
-        confirmText="Excluir"
-        cancelText="Cancelar"
-        variant="danger"
+        isOpen={pendingDelete !== null}
+        onClose={() => setPendingDelete(null)}
+        onConfirm={executeDeletion}
+        title={deletionTitle}
+        message={pendingDelete ? `Tem certeza que deseja excluir "${deletionName}"? Essa ação não pode ser desfeita.` : ''}
       />
     </div>
   );

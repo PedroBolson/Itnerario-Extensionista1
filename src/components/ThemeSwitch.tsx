@@ -2,6 +2,11 @@ import { motion } from 'framer-motion';
 import { Sun, Moon } from 'lucide-react';
 import { useTheme } from '../hooks/useTheme';
 
+type ThemeSwitchProps = {
+    className?: string;
+    fixed?: boolean;
+};
+
 const Star = ({ delay, x, y }: { delay: number; x: number; y: number }) => (
     <motion.div
         className="absolute w-0.5 h-0.5 bg-yellow-200 rounded-full"
@@ -39,11 +44,15 @@ const Cloud = ({ delay, x, y }: { delay: number; x: number; y: number }) => (
     </motion.div>
 );
 
-export const ThemeSwitch = () => {
+export const ThemeSwitch = ({ className = '', fixed = true }: ThemeSwitchProps) => {
     const { isDark, toggleTheme } = useTheme();
 
+    const containerClass = fixed
+        ? `fixed top-4 right-4 md:top-6 md:right-6 z-30 ${className}`
+        : `inline-flex ${className}`;
+
     return (
-        <div className="fixed top-4 right-4 md:top-6 md:right-6 z-50">
+        <div className={containerClass}>
             <motion.button
                 onClick={toggleTheme}
                 className="relative w-16 h-8 rounded-full focus:outline-none focus:ring-2 focus:ring-primary/30 transition-all duration-300 overflow-hidden"
