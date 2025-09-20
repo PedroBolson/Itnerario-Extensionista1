@@ -34,9 +34,26 @@
   box-shadow: inset 0 0 0 2px var(--color-primary);
 }
 
-html, body, #root {
+html,
+body,
+#root {
   min-height: 100%;
   background-color: var(--bg-base);
+}
+
+/* Line clamp utilities */
+.line-clamp-2 {
+  overflow: hidden;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+}
+
+.line-clamp-3 {
+  overflow: hidden;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 3;
 }
 
 .dark {
@@ -47,9 +64,12 @@ html, body, #root {
   --color-accent: #22d3ee;
 
   /* Neutros escuros */
-  --bg-base: #0b1220; /* único fundo base para evitar faixas */
-  --bg-surface: #0b1220; /* igual ao base para não haver segunda cor */
-  --bg-surface-hover: #121a2b; /* leve variação apenas em hover/ativo */
+  --bg-base: #0b1220;
+  /* único fundo base para evitar faixas */
+  --bg-surface: #0b1220;
+  /* igual ao base para não haver segunda cor */
+  --bg-surface-hover: #121a2b;
+  /* leve variação apenas em hover/ativo */
   --text-primary: #f8fafc;
   --text-secondary: #cbd5e1;
   --text-muted: #94a3b8;
@@ -91,12 +111,19 @@ textarea::placeholder {
   color: var(--text-muted);
 }
 
-input, textarea, select {
+input,
+textarea,
+select {
   color: var(--text-primary);
 }
 
 /* Cursor pointer em elementos interativos */
-button, a[href], [role="button"], input[type="checkbox"], input[type="radio"], summary {
+button,
+a[href],
+[role="button"],
+input[type="checkbox"],
+input[type="radio"],
+summary {
   cursor: pointer;
 }
 
@@ -167,7 +194,8 @@ button, a[href], [role="button"], input[type="checkbox"], input[type="radio"], s
 
 /* Popper container */
 .themed-datepicker-popper {
-  z-index: 50; /* above cards */
+  z-index: 50;
+  /* above cards */
 }
 
 .themed-datepicker .react-datepicker__navigation-icon::before {

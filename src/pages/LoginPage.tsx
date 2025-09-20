@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
-import { useAuth } from '../context/AuthContext';
+import { useAuth } from '../hooks/useAuth';
 
 export function LoginPage() {
   const { signIn } = useAuth();
@@ -11,7 +11,7 @@ export function LoginPage() {
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
 
-  const from = (location.state as any)?.from?.pathname || '/dashboard';
+  const from = (location.state as { from?: { pathname: string } })?.from?.pathname || '/dashboard';
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -20,8 +20,8 @@ export function LoginPage() {
     try {
       await signIn(email.trim(), password);
       navigate(from, { replace: true });
-    } catch (err: any) {
-      const msg = err?.message || 'Falha ao entrar. Verifique suas credenciais.';
+    } catch (err: unknown) {
+      const msg = (err as Error)?.message || 'Falha ao entrar. Verifique suas credenciais.';
       setError(msg);
     } finally {
       setLoading(false);

@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { useAuth } from '../context/AuthContext';
+import { useAuth } from '../hooks/useAuth';
 import type { Topic, Content, Lesson } from '../lib/db';
 import {
   createTopic,
@@ -23,6 +23,7 @@ import { DragDropContext, Droppable, Draggable, type DropResult } from '@hello-p
 import { GripVertical, ChevronRight, Pencil, Trash2, Plus, ArrowLeft } from 'lucide-react';
 import { motion } from 'framer-motion';
 import { ConfirmDialog } from '../components/ConfirmDialog';
+import { TOPIC_CATEGORIES, DIFFICULTY_LEVELS } from '../lib/courseUtils';
 
 export function DashboardPage() {
   const { signOutUser, user } = useAuth();
@@ -34,16 +35,26 @@ export function DashboardPage() {
   // Topics
   const [topics, setTopics] = useState<Topic[]>([]);
   const [newTopicName, setNewTopicName] = useState('');
+  const [newTopicImageUrl, setNewTopicImageUrl] = useState('');
+  const [newTopicCategory, setNewTopicCategory] = useState('');
   const [editingTopicId, setEditingTopicId] = useState<string | null>(null);
   const [editingTopicName, setEditingTopicName] = useState('');
+  const [editingTopicImageUrl, setEditingTopicImageUrl] = useState('');
+  const [editingTopicCategory, setEditingTopicCategory] = useState('');
 
   // Contents (for selected topic)
   const [contents, setContents] = useState<Content[]>([]);
   const [newContentTitle, setNewContentTitle] = useState('');
   const [newContentDesc, setNewContentDesc] = useState('');
+  const [newContentImageUrl, setNewContentImageUrl] = useState('');
+  const [newContentDifficulty, setNewContentDifficulty] = useState('');
+  const [newContentDuration, setNewContentDuration] = useState('');
   const [editingContentId, setEditingContentId] = useState<string | null>(null);
   const [editingContentTitle, setEditingContentTitle] = useState('');
   const [editingContentDesc, setEditingContentDesc] = useState('');
+  const [editingContentImageUrl, setEditingContentImageUrl] = useState('');
+  const [editingContentDifficulty, setEditingContentDifficulty] = useState('');
+  const [editingContentDuration, setEditingContentDuration] = useState('');
 
   // Lessons (for selected content)
   const [expandedContentId, setExpandedContentId] = useState<string | null>(null);
@@ -189,14 +200,52 @@ export function DashboardPage() {
                       value={topicQuery}
                       onChange={(e) => setTopicQuery(e.target.value)}
                     />
-                    <form className="flex items-center gap-2" onSubmit={async (e) => {
+                    <form className="space-y-3 p-4 bg-theme-surface rounded-xl border border-theme" onSubmit={async (e) => {
                       e.preventDefault();
                       if (!newTopicName.trim()) return;
-                      await createTopic(newTopicName.trim(), topics.length);
+
+                      const topicData = {
+                        name: newTopicName.trim(),
+                        order: topics.length,
+                        ...(newTopicImageUrl.trim() && { coverImageUrl: newTopicImageUrl.trim() }),
+                        ...(newTopicCategory && { category: newTopicCategory }),
+                      };
+
+                      await createTopic(topicData);
+
                       setNewTopicName('');
+                      setNewTopicImageUrl('');
+                      setNewTopicCategory('');
                     }}>
-                      <input placeholder="Novo tópico" className="w-48 px-3 py-2 rounded-xl bg-theme-base border border-theme text-theme-primary" value={newTopicName} onChange={(e) => setNewTopicName(e.target.value)} />
-                      <button className="px-3 py-2 rounded-xl btn-primary flex items-center gap-2"><Plus size={16} /> Adicionar</button>
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                        <input
+                          placeholder="Nome do tópico"
+                          className="px-3 py-2 rounded-xl bg-theme-base border border-theme text-theme-primary"
+                          value={newTopicName}
+                          onChange={(e) => setNewTopicName(e.target.value)}
+                          required
+                        />
+                        <select
+                          className="px-3 py-2 rounded-xl bg-theme-base border border-theme text-theme-primary"
+                          value={newTopicCategory}
+                          onChange={(e) => setNewTopicCategory(e.target.value)}
+                        >
+                          <option value="">Selecione uma categoria</option>
+                          {Object.entries(TOPIC_CATEGORIES).map(([key, cat]) => (
+                            <option key={key} value={key}>{cat.name}</option>
+                          ))}
+                        </select>
+                      </div>
+                      <input
+                        placeholder="URL da imagem de capa (opcional)"
+                        className="w-full px-3 py-2 rounded-xl bg-theme-base border border-theme text-theme-primary"
+                        value={newTopicImageUrl}
+                        onChange={(e) => setNewTopicImageUrl(e.target.value)}
+                        type="url"
+                      />
+                      <button type="submit" className="px-4 py-2 rounded-xl btn-primary flex items-center gap-2">
+                        <Plus size={16} /> Adicionar Tópico
+                      </button>
                     </form>
                   </div>
                 )}
@@ -211,7 +260,34 @@ export function DashboardPage() {
                           <li ref={drag.innerRef} {...drag.draggableProps} className={`px-3 py-2 flex items-center gap-3 bg-transparent rounded-xl border border-theme hover:bg-theme-surface-hover/30 ${selectedTopic?.id === t.id ? 'is-active' : ''}`}>
                             <span {...drag.dragHandleProps} className="text-theme-secondary cursor-grab active:cursor-grabbing select-none"><GripVertical size={18} /></span>
                             {editingTopicId === t.id ? (
-                              <input autoFocus className="flex-1 px-3 py-2 rounded-xl bg-theme-surface border border-theme text-theme-primary" value={editingTopicName} onChange={(e) => setEditingTopicName(e.target.value)} />
+                              <div className="flex-1 space-y-2">
+                                <input
+                                  autoFocus
+                                  className="w-full px-3 py-2 rounded-xl bg-theme-surface border border-theme text-theme-primary"
+                                  placeholder="Nome do tópico"
+                                  value={editingTopicName}
+                                  onChange={(e) => setEditingTopicName(e.target.value)}
+                                />
+                                <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+                                  <input
+                                    className="px-3 py-2 rounded-xl bg-theme-surface border border-theme text-theme-primary text-sm"
+                                    placeholder="URL da imagem (opcional)"
+                                    value={editingTopicImageUrl}
+                                    onChange={(e) => setEditingTopicImageUrl(e.target.value)}
+                                    type="url"
+                                  />
+                                  <select
+                                    className="px-3 py-2 rounded-xl bg-theme-surface border border-theme text-theme-primary text-sm"
+                                    value={editingTopicCategory}
+                                    onChange={(e) => setEditingTopicCategory(e.target.value)}
+                                  >
+                                    <option value="">Categoria (opcional)</option>
+                                    {Object.entries(TOPIC_CATEGORIES).map(([key, cat]) => (
+                                      <option key={key} value={key}>{cat.name}</option>
+                                    ))}
+                                  </select>
+                                </div>
+                              </div>
                             ) : (
                               <button className="flex-1 text-left font-medium truncate hover:underline" onClick={() => { setSelectedTopic(t); setExpandedContentId(null); }}>
                                 {t.name}
@@ -219,12 +295,31 @@ export function DashboardPage() {
                             )}
                             {editingTopicId === t.id ? (
                               <>
-                                <button className="px-3 py-2 rounded-xl border border-theme" onClick={() => setEditingTopicId(null)}>Cancelar</button>
-                                <button className="px-3 py-2 rounded-xl btn-primary" onClick={async () => { await updateTopic(t.id, { name: editingTopicName }); setEditingTopicId(null); }}>Salvar</button>
+                                <button className="px-3 py-2 rounded-xl border border-theme" onClick={() => {
+                                  setEditingTopicId(null);
+                                  setEditingTopicName('');
+                                  setEditingTopicImageUrl('');
+                                  setEditingTopicCategory('');
+                                }}>Cancelar</button>
+                                <button className="px-3 py-2 rounded-xl btn-primary" onClick={async () => {
+                                  const updateData: Partial<Topic> = { name: editingTopicName };
+                                  if (editingTopicImageUrl.trim()) updateData.coverImageUrl = editingTopicImageUrl.trim();
+                                  if (editingTopicCategory) updateData.category = editingTopicCategory;
+                                  await updateTopic(t.id, updateData);
+                                  setEditingTopicId(null);
+                                  setEditingTopicName('');
+                                  setEditingTopicImageUrl('');
+                                  setEditingTopicCategory('');
+                                }}>Salvar</button>
                               </>
                             ) : topicsActive ? (
                               <>
-                                <button className="px-3 py-2 rounded-xl border border-theme flex items-center gap-2" onClick={() => { setEditingTopicId(t.id); setEditingTopicName(t.name); }}><Pencil size={16} /> Renomear</button>
+                                <button className="px-3 py-2 rounded-xl border border-theme flex items-center gap-2" onClick={() => {
+                                  setEditingTopicId(t.id);
+                                  setEditingTopicName(t.name);
+                                  setEditingTopicImageUrl(t.coverImageUrl || '');
+                                  setEditingTopicCategory(t.category || '');
+                                }}><Pencil size={16} /> Editar</button>
                                 <button className="px-3 py-2 rounded-xl border border-theme text-red-500 flex items-center gap-2" onClick={() => openConfirmDialog('Excluir Tópico', `Tem certeza que deseja excluir o tópico "${t.name}"? Esta ação não pode ser desfeita.`, async () => await deleteTopic(t.id))}><Trash2 size={16} /> Excluir</button>
                               </>
                             ) : null}
@@ -263,16 +358,72 @@ export function DashboardPage() {
 
                   <div className="p-4 space-y-3">
                     {contentsActive && (
-                      <form className="flex flex-col sm:flex-row gap-2" onSubmit={async (e) => {
+                      <form className="space-y-3 p-4 bg-theme-base rounded-xl border border-theme" onSubmit={async (e) => {
                         e.preventDefault();
                         if (!newContentTitle.trim()) return;
-                        const desc = newContentDesc.trim();
-                        await createContent({ topicId: selectedTopic!.id, title: newContentTitle.trim(), ...(desc ? { description: desc } : {}), order: contents.length } as any);
-                        setNewContentTitle(''); setNewContentDesc('');
+
+                        const contentData = {
+                          topicId: selectedTopic!.id,
+                          title: newContentTitle.trim(),
+                          order: contents.length,
+                          ...(newContentDesc.trim() && { description: newContentDesc.trim() }),
+                          ...(newContentImageUrl.trim() && { coverImageUrl: newContentImageUrl.trim() }),
+                          ...(newContentDifficulty && { difficulty: newContentDifficulty as 'beginner' | 'intermediate' | 'advanced' }),
+                          ...(newContentDuration && { estimatedDuration: parseInt(newContentDuration) }),
+                        };
+
+                        await createContent(contentData);
+                        setNewContentTitle('');
+                        setNewContentDesc('');
+                        setNewContentImageUrl('');
+                        setNewContentDifficulty('');
+                        setNewContentDuration('');
                       }}>
-                        <input placeholder="Título do conteúdo" className="flex-1 px-3 py-2 rounded-xl bg-theme-base border border-theme text-theme-primary" value={newContentTitle} onChange={(e) => setNewContentTitle(e.target.value)} />
-                        <input placeholder="Descrição (opcional)" className="flex-1 px-3 py-2 rounded-xl bg-theme-base border border-theme text-theme-primary" value={newContentDesc} onChange={(e) => setNewContentDesc(e.target.value)} />
-                        <button className="px-3 py-2 rounded-xl btn-primary">Adicionar</button>
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                          <input
+                            placeholder="Título do conteúdo"
+                            className="px-3 py-2 rounded-xl bg-theme-surface border border-theme text-theme-primary"
+                            value={newContentTitle}
+                            onChange={(e) => setNewContentTitle(e.target.value)}
+                            required
+                          />
+                          <select
+                            className="px-3 py-2 rounded-xl bg-theme-surface border border-theme text-theme-primary"
+                            value={newContentDifficulty}
+                            onChange={(e) => setNewContentDifficulty(e.target.value)}
+                          >
+                            <option value="">Selecione a dificuldade</option>
+                            {Object.entries(DIFFICULTY_LEVELS).map(([key, level]) => (
+                              <option key={key} value={key}>{level.name}</option>
+                            ))}
+                          </select>
+                        </div>
+                        <input
+                          placeholder="Descrição (opcional)"
+                          className="w-full px-3 py-2 rounded-xl bg-theme-surface border border-theme text-theme-primary"
+                          value={newContentDesc}
+                          onChange={(e) => setNewContentDesc(e.target.value)}
+                        />
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                          <input
+                            placeholder="URL da imagem de capa (opcional)"
+                            className="px-3 py-2 rounded-xl bg-theme-surface border border-theme text-theme-primary"
+                            value={newContentImageUrl}
+                            onChange={(e) => setNewContentImageUrl(e.target.value)}
+                            type="url"
+                          />
+                          <input
+                            placeholder="Duração em minutos (opcional)"
+                            className="px-3 py-2 rounded-xl bg-theme-surface border border-theme text-theme-primary"
+                            value={newContentDuration}
+                            onChange={(e) => setNewContentDuration(e.target.value)}
+                            type="number"
+                            min="1"
+                          />
+                        </div>
+                        <button type="submit" className="px-4 py-2 rounded-xl btn-primary flex items-center gap-2">
+                          <Plus size={16} /> Adicionar Conteúdo
+                        </button>
                       </form>
                     )}
 
@@ -295,9 +446,46 @@ export function DashboardPage() {
                                 <li ref={drag.innerRef} {...drag.draggableProps} className={`px-3 py-2 flex items-center gap-3 bg-transparent rounded-xl border border-theme hover:bg-theme-surface-hover/30 ${expandedContentId === c.id ? 'is-active' : ''}`}>
                                   <span {...drag.dragHandleProps} className="text-theme-secondary cursor-grab active:cursor-grabbing select-none"><GripVertical size={18} /></span>
                                   {editingContentId === c.id ? (
-                                    <div className="flex-1 flex gap-2">
-                                      <input className="w-full px-3 py-2 rounded-xl bg-theme-surface border border-theme text-theme-primary" value={editingContentTitle} onChange={(e) => setEditingContentTitle(e.target.value)} />
-                                      <input className="w-full px-3 py-2 rounded-xl bg-theme-surface border border-theme text-theme-primary" value={editingContentDesc} onChange={(e) => setEditingContentDesc(e.target.value)} />
+                                    <div className="flex-1 space-y-2">
+                                      <input
+                                        className="w-full px-3 py-2 rounded-xl bg-theme-surface border border-theme text-theme-primary"
+                                        placeholder="Título do conteúdo"
+                                        value={editingContentTitle}
+                                        onChange={(e) => setEditingContentTitle(e.target.value)}
+                                      />
+                                      <input
+                                        className="w-full px-3 py-2 rounded-xl bg-theme-surface border border-theme text-theme-primary"
+                                        placeholder="Descrição (opcional)"
+                                        value={editingContentDesc}
+                                        onChange={(e) => setEditingContentDesc(e.target.value)}
+                                      />
+                                      <div className="grid grid-cols-1 md:grid-cols-3 gap-2">
+                                        <input
+                                          className="px-3 py-2 rounded-xl bg-theme-surface border border-theme text-theme-primary text-sm"
+                                          placeholder="URL da imagem (opcional)"
+                                          value={editingContentImageUrl}
+                                          onChange={(e) => setEditingContentImageUrl(e.target.value)}
+                                          type="url"
+                                        />
+                                        <select
+                                          className="px-3 py-2 rounded-xl bg-theme-surface border border-theme text-theme-primary text-sm"
+                                          value={editingContentDifficulty}
+                                          onChange={(e) => setEditingContentDifficulty(e.target.value)}
+                                        >
+                                          <option value="">Dificuldade (opcional)</option>
+                                          {Object.entries(DIFFICULTY_LEVELS).map(([key, level]) => (
+                                            <option key={key} value={key}>{level.name}</option>
+                                          ))}
+                                        </select>
+                                        <input
+                                          className="px-3 py-2 rounded-xl bg-theme-surface border border-theme text-theme-primary text-sm"
+                                          placeholder="Duração (min)"
+                                          value={editingContentDuration}
+                                          onChange={(e) => setEditingContentDuration(e.target.value)}
+                                          type="number"
+                                          min="1"
+                                        />
+                                      </div>
                                     </div>
                                   ) : (
                                     <button className="flex-1 text-left" onClick={() => setExpandedContentId(c.id)}>
@@ -308,12 +496,41 @@ export function DashboardPage() {
                                   <div className="flex gap-2 ml-auto">
                                     {editingContentId === c.id ? (
                                       <>
-                                        <button className="px-3 py-2 rounded-xl border border-theme" onClick={() => setEditingContentId(null)}>Cancelar</button>
-                                        <button className="px-3 py-2 rounded-xl btn-primary" onClick={async () => { await updateContent(c.id, { title: editingContentTitle, description: editingContentDesc }); setEditingContentId(null); }}>Salvar</button>
+                                        <button className="px-3 py-2 rounded-xl border border-theme" onClick={() => {
+                                          setEditingContentId(null);
+                                          setEditingContentTitle('');
+                                          setEditingContentDesc('');
+                                          setEditingContentImageUrl('');
+                                          setEditingContentDifficulty('');
+                                          setEditingContentDuration('');
+                                        }}>Cancelar</button>
+                                        <button className="px-3 py-2 rounded-xl btn-primary" onClick={async () => {
+                                          const updateData: Partial<Content> = {
+                                            title: editingContentTitle,
+                                            description: editingContentDesc || undefined
+                                          };
+                                          if (editingContentImageUrl.trim()) updateData.coverImageUrl = editingContentImageUrl.trim();
+                                          if (editingContentDifficulty) updateData.difficulty = editingContentDifficulty as 'beginner' | 'intermediate' | 'advanced';
+                                          if (editingContentDuration) updateData.estimatedDuration = parseInt(editingContentDuration);
+                                          await updateContent(c.id, updateData);
+                                          setEditingContentId(null);
+                                          setEditingContentTitle('');
+                                          setEditingContentDesc('');
+                                          setEditingContentImageUrl('');
+                                          setEditingContentDifficulty('');
+                                          setEditingContentDuration('');
+                                        }}>Salvar</button>
                                       </>
                                     ) : contentsActive ? (
                                       <>
-                                        <button className="px-3 py-2 rounded-xl border border-theme" onClick={() => { setEditingContentId(c.id); setEditingContentTitle(c.title); setEditingContentDesc(c.description || ''); }}>Editar</button>
+                                        <button className="px-3 py-2 rounded-xl border border-theme" onClick={() => {
+                                          setEditingContentId(c.id);
+                                          setEditingContentTitle(c.title);
+                                          setEditingContentDesc(c.description || '');
+                                          setEditingContentImageUrl(c.coverImageUrl || '');
+                                          setEditingContentDifficulty(c.difficulty || '');
+                                          setEditingContentDuration(c.estimatedDuration ? c.estimatedDuration.toString() : '');
+                                        }}>Editar</button>
                                         <button className="px-3 py-2 rounded-xl border border-theme text-red-500" onClick={() => openConfirmDialog('Excluir Conteúdo', `Tem certeza que deseja excluir o conteúdo "${c.title}"? Esta ação não pode ser desfeita.`, async () => await deleteContent(c.id))}>Excluir</button>
                                       </>
                                     ) : null}

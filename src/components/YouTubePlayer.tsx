@@ -15,7 +15,7 @@ function extractYouTubeId(url: string): string | null {
       const match = u.pathname.match(/\/embed\/([\w-]+)/);
       if (match) return match[1];
     }
-  } catch (_) {
+  } catch {
     return null;
   }
   return null;

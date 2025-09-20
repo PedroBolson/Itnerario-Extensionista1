@@ -2,7 +2,11 @@ import { useEffect, useMemo, useState } from 'react';
 import type { Topic, Content, Lesson } from '../lib/db';
 import { listAllTopics, listContentsByTopic, listLessonsByContent } from '../lib/db';
 import { YouTubePlayer } from '../components/YouTubePlayer';
+import { CourseImage } from '../components/CourseImage';
+import { CategoryIcon } from '../components/CategoryIcon';
 import { motion, AnimatePresence } from 'framer-motion';
+import { getCategoryInfo, getDifficultyInfo, formatDuration, generateColorFromString } from '../lib/courseUtils';
+import { Home, Search, Clock, ChevronRight, BookOpen } from 'lucide-react';
 
 export function CoursesPage() {
   const [topics, setTopics] = useState<Topic[]>([]);
@@ -52,50 +56,196 @@ export function CoursesPage() {
 
         <AnimatePresence mode="wait">
           {stage === 'topics' && (
-            <motion.section key="topics" initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -8 }} className="space-y-3">
-              <div className="flex items-center justify-between gap-2">
-                <div className="text-sm text-theme-secondary">Escolha um tópico</div>
-                <input placeholder="Buscar tópicos" className="px-3 py-2 rounded-xl bg-theme-surface border border-theme text-theme-primary w-64" value={topicQuery} onChange={(e) => setTopicQuery(e.target.value)} />
+            <motion.section key="topics" initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -8 }} className="space-y-4">
+              <div className="flex items-center justify-between gap-4">
+                <div>
+                  <h2 className="text-lg font-semibold">Escolha um tópico</h2>
+                  <p className="text-sm text-theme-secondary">Explore diferentes áreas de conhecimento</p>
+                </div>
+                <input
+                  placeholder="Buscar tópicos..."
+                  className="px-4 py-2 rounded-xl bg-theme-surface border border-theme text-theme-primary w-80 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  value={topicQuery}
+                  onChange={(e) => setTopicQuery(e.target.value)}
+                />
               </div>
-              <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-3">
-                {filteredTopics.map((t) => (
-                  <motion.button key={t.id} whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.98 }} className={`px-3 py-3 rounded-xl border text-left ${selectedTopicId === t.id ? 'is-active' : 'border-theme bg-theme-surface hover:bg-theme-surface-hover'}`} onClick={() => { setSelectedTopicId(t.id); setTopicQuery(''); }}>
-                    <div className="font-medium truncate">{t.name}</div>
-                  </motion.button>
-                ))}
-                {filteredTopics.length === 0 && <div className="text-sm text-theme-secondary">Nenhum tópico encontrado</div>}
+              <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4">
+                {filteredTopics.map((t) => {
+                  const categoryInfo = getCategoryInfo(t.category);
+                  const fallbackColor = t.color || generateColorFromString(t.name);
+
+                  return (
+                    <motion.button
+                      key={t.id}
+                      whileHover={{ scale: 1.03, y: -4 }}
+                      whileTap={{ scale: 0.98 }}
+                      className={`group relative overflow-hidden rounded-2xl border bg-theme-surface text-left transition-all duration-300 ${selectedTopicId === t.id
+                          ? 'ring-2 ring-blue-500 border-blue-500'
+                          : 'border-theme hover:border-gray-300 hover:shadow-lg'
+                        }`}
+                      onClick={() => { setSelectedTopicId(t.id); setTopicQuery(''); }}
+                    >
+                      <div className="relative">
+                        <CourseImage
+                          src={t.coverImageUrl}
+                          alt={t.name}
+                          fallbackColor={fallbackColor}
+                          fallbackIcon={categoryInfo.icon}
+                          aspectRatio="video"
+                          className="group-hover:scale-105 transition-transform duration-300"
+                        />
+
+                        {/* Overlay com gradiente */}
+                        <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-black/20 to-transparent rounded-xl" />
+
+                        {/* Badge de categoria */}
+                        <div
+                          className="absolute top-3 right-3 px-2 py-1 rounded-full text-xs font-medium text-white backdrop-blur-sm flex items-center gap-1"
+                          style={{ backgroundColor: categoryInfo.color + '90' }}
+                        >
+                          <CategoryIcon Icon={categoryInfo.icon} size={12} />
+                          <span>{categoryInfo.name}</span>
+                        </div>
+
+                        {/* Título sobreposto */}
+                        <div className="absolute bottom-0 left-0 right-0 p-4">
+                          <h3 className="font-semibold text-white text-lg leading-tight">{t.name}</h3>
+                        </div>
+                      </div>
+                    </motion.button>
+                  );
+                })}
+                {filteredTopics.length === 0 && (
+                  <div className="col-span-full text-center py-12">
+                    <Search size={64} className="mx-auto mb-4 text-theme-secondary opacity-50" />
+                    <div className="text-lg font-medium text-theme-secondary">Nenhum tópico encontrado</div>
+                    <div className="text-sm text-theme-secondary">Tente buscar com outros termos</div>
+                  </div>
+                )}
               </div>
             </motion.section>
           )}
 
           {stage === 'contents' && (
-            <motion.section key="contents" initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -8 }} className="space-y-3">
-              <div className="flex items-center justify-between gap-2">
-                <div className="text-sm text-theme-secondary">{selectedTopicName}</div>
-                <div className="flex gap-2">
-                  <button className="px-3 py-2 rounded-xl border border-theme" onClick={() => { setSelectedTopicId(''); setSelectedContentId(''); setLessons([]); }}>Trocar tópico</button>
-                  <input placeholder="Buscar conteúdos" className="px-3 py-2 rounded-xl bg-theme-surface border border-theme text-theme-primary w-64" value={contentQuery} onChange={(e) => setContentQuery(e.target.value)} />
+            <motion.section key="contents" initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -8 }} className="space-y-4">
+              <div className="flex items-center justify-between gap-4">
+                <div>
+                  <nav className="flex items-center gap-2 mb-2 text-sm">
+                    <button
+                      className="text-blue-500 hover:text-blue-600 flex items-center gap-1"
+                      onClick={() => { setSelectedTopicId(''); setSelectedContentId(''); setLessons([]); }}
+                    >
+                      <Home size={14} />
+                      <span>Tópicos</span>
+                    </button>
+                    <ChevronRight size={14} className="text-theme-secondary" />
+                    <span className="text-theme-primary font-medium">{selectedTopicName}</span>
+                  </nav>
+                  <h2 className="text-xl font-semibold">Cursos disponíveis</h2>
+                  <p className="text-sm text-theme-secondary">Escolha um curso para começar sua jornada de aprendizado</p>
                 </div>
+                <input
+                  placeholder="Buscar cursos..."
+                  className="px-4 py-2 rounded-xl bg-theme-surface border border-theme text-theme-primary w-80 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  value={contentQuery}
+                  onChange={(e) => setContentQuery(e.target.value)}
+                />
               </div>
-              <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-3">
-                {filteredContents.map((c) => (
-                  <motion.button key={c.id} whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.98 }} className={`px-3 py-3 rounded-xl border text-left ${selectedContentId === c.id ? 'is-active' : 'border-theme bg-theme-surface hover:bg-theme-surface-hover'}`} onClick={() => { setSelectedContentId(c.id); }}>
-                    <div className="font-medium truncate">{c.title}</div>
-                    {c.description && <div className="text-xs text-theme-secondary truncate">{c.description}</div>}
-                  </motion.button>
-                ))}
-                {filteredContents.length === 0 && <div className="text-sm text-theme-secondary">Nenhum conteúdo</div>}
+              <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6">
+                {filteredContents.map((c) => {
+                  const difficultyInfo = getDifficultyInfo(c.difficulty);
+
+                  return (
+                    <motion.button
+                      key={c.id}
+                      whileHover={{ scale: 1.03, y: -4 }}
+                      whileTap={{ scale: 0.98 }}
+                      className={`group relative overflow-hidden rounded-2xl border bg-theme-surface text-left transition-all duration-300 ${selectedContentId === c.id
+                          ? 'ring-2 ring-blue-500 border-blue-500'
+                          : 'border-theme hover:border-gray-300 hover:shadow-lg'
+                        }`}
+                      onClick={() => { setSelectedContentId(c.id); }}
+                    >
+                      <div className="relative">
+                        <CourseImage
+                          src={c.coverImageUrl}
+                          alt={c.title}
+                          fallbackColor={generateColorFromString(c.title)}
+                          fallbackIcon={difficultyInfo.icon}
+                          aspectRatio="video"
+                          className="group-hover:scale-105 transition-transform duration-300"
+                        />
+
+                        {/* Overlay com gradiente */}
+                        <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-black/20 to-transparent rounded-xl" />
+
+                        {/* Badge de dificuldade */}
+                        <div
+                          className="absolute top-3 right-3 px-2 py-1 rounded-full text-xs font-medium text-white backdrop-blur-sm flex items-center gap-1"
+                          style={{ backgroundColor: difficultyInfo.color + '90' }}
+                        >
+                          <CategoryIcon Icon={difficultyInfo.icon} size={12} />
+                          <span>{difficultyInfo.name}</span>
+                        </div>
+
+                        {/* Duração (se disponível) */}
+                        {c.estimatedDuration && (
+                          <div className="absolute top-3 left-3 px-2 py-1 bg-black/50 backdrop-blur-sm rounded-full text-xs font-medium text-white flex items-center gap-1">
+                            <Clock size={12} />
+                            <span>{formatDuration(c.estimatedDuration)}</span>
+                          </div>
+                        )}
+                      </div>
+
+                      {/* Informações do curso */}
+                      <div className="p-4 space-y-2">
+                        <h3 className="font-semibold text-base leading-tight line-clamp-2">{c.title}</h3>
+                        {c.description && (
+                          <p className="text-sm text-theme-secondary line-clamp-3">{c.description}</p>
+                        )}
+                      </div>
+                    </motion.button>
+                  );
+                })}
+                {filteredContents.length === 0 && (
+                  <div className="col-span-full text-center py-12">
+                    <BookOpen size={64} className="mx-auto mb-4 text-theme-secondary opacity-50" />
+                    <div className="text-lg font-medium text-theme-secondary">Nenhum curso encontrado</div>
+                    <div className="text-sm text-theme-secondary">Tente buscar com outros termos</div>
+                  </div>
+                )}
               </div>
             </motion.section>
           )}
 
           {stage === 'lessons' && (
             <motion.section key="lessons" initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -8 }} className="space-y-4">
-              <div className="flex items-center justify-between gap-2">
-                <div className="text-sm text-theme-secondary">{selectedTopicName} › {selectedContentTitle}</div>
-                <div className="flex gap-2">
-                  <button className="px-3 py-2 rounded-xl border border-theme" onClick={() => { setSelectedContentId(''); setActiveLessonId(''); }}>Trocar conteúdo</button>
-                  <button className="px-3 py-2 rounded-xl border border-theme" onClick={() => { setSelectedTopicId(''); setSelectedContentId(''); setActiveLessonId(''); }}>Trocar tópico</button>
+              <div className="space-y-3">
+                <nav className="flex items-center gap-2 text-sm">
+                  <button
+                    className="text-blue-500 hover:text-blue-600 flex items-center gap-1"
+                    onClick={() => { setSelectedTopicId(''); setSelectedContentId(''); setActiveLessonId(''); }}
+                  >
+                    <Home size={14} />
+                    <span>Tópicos</span>
+                  </button>
+                  <ChevronRight size={14} className="text-theme-secondary" />
+                  <button
+                    className="text-blue-500 hover:text-blue-600"
+                    onClick={() => { setSelectedContentId(''); setActiveLessonId(''); }}
+                  >
+                    {selectedTopicName}
+                  </button>
+                  <ChevronRight size={14} className="text-theme-secondary" />
+                  <span className="text-theme-primary font-medium">{selectedContentTitle}</span>
+                </nav>
+
+                <div className="flex items-center justify-between">
+                  <h2 className="text-xl font-semibold">Aulas do curso</h2>
+                  <div className="flex items-center gap-2 text-sm text-theme-secondary">
+                    <CategoryIcon Icon={BookOpen} size={14} />
+                    <span>{lessons.length} aulas</span>
+                  </div>
                 </div>
               </div>
               <div className="grid grid-cols-1 xl:grid-cols-3 gap-4">
