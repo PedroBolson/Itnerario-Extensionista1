@@ -29,89 +29,81 @@ service cloud.firestore {
     // =============================================================================
     
     match /learningProgress/{participantId} {
-      // ADMINS AUTENTICADOS: Acesso total a todos os dados
-      allow read, write: if request.auth != null;
-      
-      // USUÁRIOS COM CÓDIGO: Podem criar perfil e acessar apenas seus próprios dados
-      allow create: if 
-        // Permite criar se o document ID for igual ao código fornecido
-        participantId == resource.data.code ||
-        // Ou se estiver criando um novo documento com código válido
-        (resource == null && 
-         request.resource.data.code == participantId &&
-         request.resource.data.code is string &&
-         request.resource.data.code.size() == 4 &&
-         (request.resource.data.displayName == null ||
-          (request.resource.data.displayName is string && request.resource.data.displayName.size() > 0)) &&
-         request.resource.data.createdAt is timestamp &&
-         (!request.resource.data.keys().hasAny(['lessonProgress']) ||
-          isValidLessonProgressMap(request.resource.data.lessonProgress))
-        );
-      
-      // USUÁRIOS COM CÓDIGO: Podem ler apenas seus próprios dados
-      allow read: if 
-        // Se for admin autenticado, já foi permitido acima
-        request.auth != null ||
-        // Ou se for o próprio participante (validação por código seria feita no frontend)
-        true; // Temporário para permitir leitura - será refinado se necessário
-      
-      // USUÁRIOS COM CÓDIGO: Podem atualizar apenas seus próprios dados básicos
-      allow update: if 
-        request.auth != null || // Admins podem tudo
-        (
-          participantId == resource.data.code &&
-          request.resource.data.keys().hasOnly(['lastActiveAt', 'lessonProgress']) &&
-          (!request.resource.data.keys().hasAny(['lessonProgress']) ||
-            isValidLessonProgressMap(request.resource.data.lessonProgress)) &&
-          (!request.resource.data.keys().hasAny(['lastActiveAt']) ||
-            request.resource.data.lastActiveAt is timestamp ||
-            request.resource.data.lastActiveAt == request.time)
-        );
+      allow read: if true;
+
+      allow create: if isAdmin() || isValidParticipantCreate(participantId);
+
+      allow update: if isAdmin() || isValidParticipantUpdate(participantId);
+
+      allow delete: if isAdmin();
     }
 
-    function isValidLessonProgressMap(progress) {
-      return progress is map && progress.values().all(p => isValidLessonProgressEntry(p));
-    }
-
-    function isValidLessonProgressEntry(entry) {
-      return entry is map &&
-        (!entry.keys().hasAny(['lastPosition']) || (entry.lastPosition is number && entry.lastPosition >= 0)) &&
-        (!entry.keys().hasAny(['duration']) || (entry.duration is number && entry.duration >= 0)) &&
-        (!entry.keys().hasAny(['completed']) || entry.completed is bool) &&
-        (!entry.keys().hasAny(['lessonTitle']) || entry.lessonTitle == null || entry.lessonTitle is string) &&
-        (!entry.keys().hasAny(['contentTitle']) || entry.contentTitle == null || entry.contentTitle is string) &&
-        (!entry.keys().hasAny(['contentId']) || entry.contentId == null || entry.contentId is string) &&
-        (!entry.keys().hasAny(['topicId']) || entry.topicId == null || entry.topicId is string) &&
-        (!entry.keys().hasAny(['topicTitle']) || entry.topicTitle == null || entry.topicTitle is string) &&
-        (!entry.keys().hasAny(['updatedAt']) || entry.updatedAt is timestamp || entry.updatedAt == request.time) &&
-        (!entry.keys().hasAny(['completedAt']) || entry.completedAt == null || entry.completedAt is timestamp || entry.completedAt == request.time);
-    }
-
-    // =============================================================================
-    // COLEÇÕES ADMINISTRATIVAS - Apenas admins autenticados
-    // =============================================================================
-    
-    // Configurações gerais do sistema
-    match /settings/{settingId} {
-      allow read, write: if request.auth != null;
-    }
-    
-    // Logs e auditoria
-    match /logs/{logId} {
-      allow read, write: if request.auth != null;
-    }
-    
-    // Usuários administrativos
-    match /admins/{adminId} {
-      allow read, write: if request.auth != null;
-    }
-
-    // =============================================================================
-    // REGRA DE FALLBACK - Nega tudo que não foi explicitamente permitido
-    // =============================================================================
-    
     match /{document=**} {
-      allow read, write: if false; // Nega explicitamente todo o resto
+      allow read, write: if false;
     }
+  }
+
+  function isAdmin() {
+    return request.auth != null;
+  }
+
+  function isValidParticipantCreate(participantId) {
+    return resource == null &&
+      hasAllowedParticipantKeys(request.resource.data) &&
+      request.resource.data.code == participantId &&
+      request.resource.data.code is string &&
+      request.resource.data.code.size() == 4 &&
+      isValidDisplayName(request.resource.data.displayName) &&
+      request.resource.data.createdAt is timestamp &&
+      isValidOptionalTimestamp(request.resource.data.lastActiveAt) &&
+      (!request.resource.data.keys().hasAny(['lessonProgress']) ||
+        isValidLessonProgressMap(request.resource.data.lessonProgress));
+  }
+
+  function isValidParticipantUpdate(participantId) {
+    return resource != null &&
+      hasAllowedParticipantKeys(request.resource.data) &&
+      request.resource.data.code == participantId &&
+      request.resource.data.code == resource.data.code &&
+      request.resource.data.createdAt == resource.data.createdAt &&
+      isValidDisplayName(request.resource.data.displayName) &&
+      isValidOptionalTimestamp(request.resource.data.lastActiveAt) &&
+      (!request.resource.data.keys().hasAny(['lessonProgress']) ||
+        isValidLessonProgressMap(request.resource.data.lessonProgress));
+  }
+
+  function hasAllowedParticipantKeys(data) {
+    return data.keys().hasOnly(['code', 'displayName', 'createdAt', 'lastActiveAt', 'lessonProgress']);
+  }
+
+  function isValidDisplayName(value) {
+    return value == null || (value is string && value.size() > 0 && value.size() <= 50);
+  }
+
+  function isValidOptionalTimestamp(value) {
+    return value == null || value is timestamp || value == request.time;
+  }
+
+  function isValidLessonProgressMap(progress) {
+    return progress is map && progress.values().all(entry => isValidLessonProgressEntry(entry));
+  }
+
+  function isValidLessonProgressEntry(entry) {
+    return entry is map &&
+      entry.keys().hasOnly(['lastPosition', 'duration', 'completed', 'lessonTitle', 'contentTitle', 'contentId', 'topicId', 'topicTitle', 'updatedAt', 'completedAt']) &&
+      entry.lastPosition is number && entry.lastPosition >= 0 &&
+      entry.duration is number && entry.duration >= 0 &&
+      entry.completed is bool &&
+      isStringOrNull(entry.lessonTitle) &&
+      isStringOrNull(entry.contentTitle) &&
+      isStringOrNull(entry.contentId) &&
+      isStringOrNull(entry.topicId) &&
+      isStringOrNull(entry.topicTitle) &&
+      (entry.updatedAt is timestamp || entry.updatedAt == request.time) &&
+      (entry.completedAt == null || entry.completedAt is timestamp || entry.completedAt == request.time);
+  }
+
+  function isStringOrNull(value) {
+    return value == null || value is string;
   }
 }
