@@ -1,14 +1,17 @@
 import { useEffect, useMemo, useState } from 'react';
-import type { Topic, Content, Lesson } from '../lib/db';
-import { listAllTopics, listContentsByTopic, listLessonsByContent } from '../lib/db';
-import { YouTubePlayer } from '../components/YouTubePlayer';
-import { CourseImage } from '../components/CourseImage';
-import { CategoryIcon } from '../components/CategoryIcon';
+import type { Topic, Content, Lesson } from '../../lib/db';
+import { listAllTopics, listContentsByTopic, listLessonsByContent } from '../../lib/db';
+import { YouTubePlayer } from '../../components/YouTubePlayer';
+import { CourseImage } from '../../components/CourseImage';
+import { CategoryIcon } from '../../components/CategoryIcon';
 import { motion, AnimatePresence } from 'framer-motion';
-import { getCategoryInfo, getDifficultyInfo, formatDuration, generateColorFromString } from '../lib/courseUtils';
-import { Home, Search, Clock, ChevronRight, BookOpen } from 'lucide-react';
+import { getCategoryInfo, getDifficultyInfo, formatDuration, generateColorFromString } from '../../lib/courseUtils';
+import { Home, Search, Clock, ChevronRight, BookOpen, CheckCircle2, User, LogOut } from 'lucide-react';
+import { useLearner } from '../../context/LearnerContext';
+import { LearnerAccess } from '../../components/LearnerAccess';
 
 export function CoursesPage() {
+  const { learner, progress, setLearner } = useLearner();
   const [topics, setTopics] = useState<Topic[]>([]);
   const [selectedTopicId, setSelectedTopicId] = useState('');
   const [contents, setContents] = useState<Content[]>([]);
@@ -17,6 +20,7 @@ export function CoursesPage() {
   const [activeLessonId, setActiveLessonId] = useState('');
   const [topicQuery, setTopicQuery] = useState('');
   const [contentQuery, setContentQuery] = useState('');
+  const [showLearnerAccess, setShowLearnerAccess] = useState(false);
 
   useEffect(() => { listAllTopics().then(setTopics); }, []);
 
@@ -33,6 +37,7 @@ export function CoursesPage() {
   const activeLesson = useMemo(() => lessons.find(l => l.id === activeLessonId) || null, [lessons, activeLessonId]);
   const selectedTopicName = useMemo(() => topics.find(t => t.id === selectedTopicId)?.name || '', [topics, selectedTopicId]);
   const selectedContentTitle = useMemo(() => contents.find(c => c.id === selectedContentId)?.title || '', [contents, selectedContentId]);
+  const activeLessonDescription = activeLesson?.description?.trim();
   const filteredTopics = useMemo(() => {
     const q = topicQuery.trim().toLowerCase();
     if (!q) return topics;
@@ -44,14 +49,69 @@ export function CoursesPage() {
     return contents.filter(c => [c.title, c.description || ''].some(v => v.toLowerCase().includes(q)));
   }, [contents, contentQuery]);
 
+  const progressByLesson = useMemo(() => {
+    const map: Record<string, typeof progress[number]> = {};
+    progress.forEach((entry) => {
+      map[entry.lessonId] = entry;
+    });
+    return map;
+  }, [progress]);
+
+  const completedLessonsCount = useMemo(() => {
+    return lessons.reduce((acc, lesson) => acc + (progressByLesson[lesson.id]?.completed ? 1 : 0), 0);
+  }, [lessons, progressByLesson]);
+
+  const totalWatchSeconds = useMemo(() => {
+    return lessons.reduce((acc, lesson) => acc + (progressByLesson[lesson.id]?.lastPosition ?? 0), 0);
+  }, [lessons, progressByLesson]);
+
+  const formattedWatchTime = useMemo(() => {
+    if (totalWatchSeconds <= 0) return '0 min';
+    const hours = Math.floor(totalWatchSeconds / 3600);
+    const minutes = Math.round((totalWatchSeconds % 3600) / 60);
+    if (hours === 0) {
+      return `${Math.max(minutes, 1)} min`;
+    }
+    return minutes > 0 ? `${hours}h ${minutes}min` : `${hours}h`;
+  }, [totalWatchSeconds]);
+
   const stage: 'topics' | 'contents' | 'lessons' = !selectedTopicId ? 'topics' : !selectedContentId ? 'contents' : 'lessons';
 
   return (
     <div className="min-h-[100svh] bg-theme-base text-theme-primary">
       <div className="max-w-[1200px] xl:max-w-[1400px] mx-auto px-6 pt-24 pb-10 space-y-6">
-        <header className="space-y-1">
-          <h1 className="text-2xl font-semibold">Mini Cursos</h1>
-          <p className="text-theme-secondary">Explore tópicos, conteúdos e assista aulas incorporadas do YouTube.</p>
+        <header className="flex justify-between items-start">
+          <div className="space-y-1">
+            <h1 className="text-2xl font-semibold">Mini Cursos</h1>
+            <p className="text-theme-secondary">Explore tópicos, conteúdos e assista aulas incorporadas do YouTube.</p>
+          </div>
+
+          {learner ? (
+            <div className="flex items-center gap-3">
+              <div className="px-4 py-2 bg-green-100 border border-green-300 text-green-700 rounded-xl flex items-center gap-3">
+                <User size={16} />
+                <div className="leading-tight">
+                  <div className="font-medium">{learner.displayName}</div>
+                  <div className="text-[11px] uppercase tracking-wide opacity-75">{learner.id}</div>
+                </div>
+              </div>
+              <button
+                onClick={() => { setLearner(null); setShowLearnerAccess(true); }}
+                className="px-3 py-2 rounded-xl border border-theme text-theme-secondary hover:text-theme-primary hover:border-theme-primary transition-colors flex items-center gap-2"
+              >
+                <LogOut size={16} />
+                <span className="text-sm font-medium">Sair</span>
+              </button>
+            </div>
+          ) : (
+            <button
+              onClick={() => setShowLearnerAccess(true)}
+              className="px-4 py-2 bg-blue-500 text-white rounded-xl hover:bg-blue-600 transition-colors flex items-center gap-2"
+            >
+              <User size={16} />
+              Acessar Progresso
+            </button>
+          )}
         </header>
 
         <AnimatePresence mode="wait">
@@ -80,8 +140,8 @@ export function CoursesPage() {
                       whileHover={{ scale: 1.03, y: -4 }}
                       whileTap={{ scale: 0.98 }}
                       className={`group relative overflow-hidden rounded-2xl border bg-theme-surface text-left transition-all duration-300 ${selectedTopicId === t.id
-                          ? 'ring-2 ring-blue-500 border-blue-500'
-                          : 'border-theme hover:border-gray-300 hover:shadow-lg'
+                        ? 'ring-2 ring-blue-500 border-blue-500'
+                        : 'border-theme hover:border-gray-300 hover:shadow-lg'
                         }`}
                       onClick={() => { setSelectedTopicId(t.id); setTopicQuery(''); }}
                     >
@@ -161,8 +221,8 @@ export function CoursesPage() {
                       whileHover={{ scale: 1.03, y: -4 }}
                       whileTap={{ scale: 0.98 }}
                       className={`group relative overflow-hidden rounded-2xl border bg-theme-surface text-left transition-all duration-300 ${selectedContentId === c.id
-                          ? 'ring-2 ring-blue-500 border-blue-500'
-                          : 'border-theme hover:border-gray-300 hover:shadow-lg'
+                        ? 'ring-2 ring-blue-500 border-blue-500'
+                        : 'border-theme hover:border-gray-300 hover:shadow-lg'
                         }`}
                       onClick={() => { setSelectedContentId(c.id); }}
                     >
@@ -242,9 +302,23 @@ export function CoursesPage() {
 
                 <div className="flex items-center justify-between">
                   <h2 className="text-xl font-semibold">Aulas do curso</h2>
-                  <div className="flex items-center gap-2 text-sm text-theme-secondary">
-                    <CategoryIcon Icon={BookOpen} size={14} />
-                    <span>{lessons.length} aulas</span>
+                  <div className="flex items-center gap-4 text-sm text-theme-secondary">
+                    <div className="flex items-center gap-2">
+                      <CategoryIcon Icon={BookOpen} size={14} />
+                      <span>{lessons.length} aulas</span>
+                    </div>
+                    {learner && (
+                      <>
+                        <div className="flex items-center gap-2 text-green-600 font-medium">
+                          <CheckCircle2 size={14} />
+                          <span>{completedLessonsCount} de {lessons.length} concluídas</span>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <Clock size={14} />
+                          <span>{formattedWatchTime} assistidos</span>
+                        </div>
+                      </>
+                    )}
                   </div>
                 </div>
               </div>
@@ -252,15 +326,22 @@ export function CoursesPage() {
                 <div className="xl:col-span-2 space-y-3">
                   <div className="rounded-2xl border border-theme p-1 bg-theme-surface">
                     {activeLesson ? (
-                      <YouTubePlayer url={activeLesson.youtubeUrl} title={activeLesson.title} />
+                      <YouTubePlayer
+                        url={activeLesson.youtubeUrl}
+                        title={activeLesson.title}
+                        lessonId={activeLessonId}
+                        contentId={selectedContentId}
+                        topicId={selectedTopicId}
+                        contentTitle={selectedContentTitle}
+                        topicTitle={selectedTopicName}
+                      />
                     ) : (
                       <div className="aspect-video w-full rounded-xl bg-theme-base grid place-items-center text-theme-muted">Selecione uma aula</div>
                     )}
                   </div>
-                  {activeLesson && (
-                    <div className="p-3 rounded-xl border border-theme bg-theme-surface">
-                      <h2 className="font-medium">{activeLesson.title}</h2>
-                      <div className="text-sm text-theme-secondary truncate">{activeLesson.youtubeUrl}</div>
+                  {activeLessonDescription && (
+                    <div className="px-4 py-3 rounded-xl bg-theme-surface text-sm leading-relaxed text-theme-secondary">
+                      {activeLessonDescription}
                     </div>
                   )}
                 </div>
@@ -269,19 +350,40 @@ export function CoursesPage() {
                     <h3 className="font-medium mb-2">Aulas</h3>
                     {lessons.length === 0 && <div className="text-sm text-theme-secondary">Nenhuma aula</div>}
                     <ul className="space-y-2">
-                      {lessons.map((l, idx) => (
-                        <li key={l.id}>
-                          <button onClick={() => setActiveLessonId(l.id)} className={`w-full text-left px-3 py-2 rounded-xl border transition-colors ${l.id === activeLessonId ? 'btn-primary' : 'border-theme bg-theme-surface text-theme-primary hover:bg-theme-surface-hover'}`}>
-                            <div className="flex items-center gap-2">
-                              <span className={`inline-flex items-center justify-center w-6 h-6 text-xs rounded-full border ${l.id === activeLessonId ? 'border-white/50' : 'border-theme'}`}>{idx + 1}</span>
-                              <div className="min-w-0">
-                                <div className="text-sm font-medium truncate">{l.title}</div>
-                                <div className="text-xs opacity-80 truncate">{l.youtubeUrl}</div>
+                      {lessons.map((l, idx) => {
+                        const lessonProgressData = progressByLesson[l.id];
+                        const isCompleted = lessonProgressData?.completed || false;
+                        const progressPercent = lessonProgressData && lessonProgressData.duration > 0 ?
+                          Math.round((lessonProgressData.lastPosition / lessonProgressData.duration) * 100) : 0;
+
+                        return (
+                          <li key={l.id}>
+                            <button onClick={() => setActiveLessonId(l.id)} className={`w-full text-left px-3 py-2 rounded-xl border transition-colors ${l.id === activeLessonId ? 'btn-primary' : 'border-theme bg-theme-surface text-theme-primary hover:bg-theme-surface-hover'}`}>
+                              <div className="flex items-center gap-2">
+                                <span className={`inline-flex items-center justify-center w-6 h-6 text-xs rounded-full border ${isCompleted ? 'bg-green-500 border-green-500 text-white' :
+                                  l.id === activeLessonId ? 'border-white/50' : 'border-theme'
+                                  }`}>
+                                  {isCompleted ? <CheckCircle2 size={12} /> : idx + 1}
+                                </span>
+                                <div className="min-w-0 flex-1">
+                                  <div className="text-sm font-medium truncate">{l.title}</div>
+                                  <div className="text-xs opacity-80 truncate">
+                                    {lessonProgressData ? `${progressPercent}% assistido` : 'Pronto para começar'}
+                                  </div>
+                                </div>
                               </div>
-                            </div>
-                          </button>
-                        </li>
-                      ))}
+                              {lessonProgressData && progressPercent > 0 && (
+                                <div className="mt-1 w-full bg-gray-200 rounded-full h-1">
+                                  <div
+                                    className={`h-1 rounded-full transition-all ${isCompleted ? 'bg-green-500' : 'bg-blue-500'}`}
+                                    style={{ width: `${progressPercent}%` }}
+                                  />
+                                </div>
+                              )}
+                            </button>
+                          </li>
+                        );
+                      })}
                     </ul>
                   </div>
                 </aside>
@@ -290,7 +392,11 @@ export function CoursesPage() {
           )}
         </AnimatePresence>
       </div>
+
+      <LearnerAccess
+        isOpen={showLearnerAccess}
+        onClose={() => setShowLearnerAccess(false)}
+      />
     </div>
   );
 }
-

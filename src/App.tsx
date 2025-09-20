@@ -1,15 +1,17 @@
 
 import { BrowserRouter as Router, Routes, Route, useLocation } from 'react-router-dom';
 import { AnimatePresence } from 'framer-motion';
-import { HomePage } from './pages/HomePage';
-import { TutorialPage } from './pages/TutorialPage';
-import { FormPage } from './pages/FormPage';
+import { HomePage } from './pages/principal/HomePage';
+import { TutorialPage } from './pages/principal/TutorialPage';
+import { FormPage } from './pages/principal/FormPage';
 import { ThemeSwitch } from './components/ThemeSwitch';
-import { LoginPage } from './pages/LoginPage';
-import { DashboardPage } from './pages/DashboardPage';
+import { LoginPage } from './pages/admin/LoginPage';
+import { DashboardPage } from './pages/admin/DashboardPage';
+import { ParticipantsPage } from './pages/admin/ParticipantsPage';
 import { ProtectedRoute } from './routes/ProtectedRoute';
 import { AuthProvider } from './context/AuthContext';
-import { CoursesPage } from './pages/CoursesPage';
+import { CoursesPage } from './pages/principal/CoursesPage';
+import { LearnerProvider } from './context/LearnerContext';
 import Navigation from './components/Navigation';
 
 
@@ -27,6 +29,7 @@ function AnimatedRoutes() {
         <Route path="/admin" element={<LoginPage />} />
         <Route element={<ProtectedRoute />}>
           <Route path="/dashboard" element={<DashboardPage />} />
+          <Route path="/dashboard/participants" element={<ParticipantsPage />} />
         </Route>
       </Routes>
     </AnimatePresence>
@@ -35,10 +38,7 @@ function AnimatedRoutes() {
 
 function AppShell() {
   const location = useLocation();
-  const hideNav = (
-    location.pathname.startsWith('/admin') ||
-    location.pathname.startsWith('/dashboard')
-  );
+  const hideNav = location.pathname.startsWith('/admin') && location.pathname === '/admin';
 
   return (
     <div className="min-h-[100svh] bg-theme-base transition-colors duration-300">
@@ -55,7 +55,9 @@ function App() {
   return (
     <Router>
       <AuthProvider>
-        <AppShell />
+        <LearnerProvider>
+          <AppShell />
+        </LearnerProvider>
       </AuthProvider>
     </Router>
   );

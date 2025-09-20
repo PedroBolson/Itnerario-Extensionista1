@@ -1,7 +1,7 @@
 import { motion } from 'framer-motion';
-import { Tutorial } from '../components/Tutorial';
+import { Hero } from '../../components/Hero';
 
-export const TutorialPage = () => {
+export const HomePage = () => {
     return (
         <motion.div
             initial={{ opacity: 0 }}
@@ -9,7 +9,7 @@ export const TutorialPage = () => {
             exit={{ opacity: 0 }}
             transition={{ duration: 0.25, ease: "easeOut" }}
         >
-            <Tutorial />
+            <Hero />
         </motion.div>
     );
 };

@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { useAuth } from '../hooks/useAuth';
-import type { Topic, Content, Lesson } from '../lib/db';
+import { useAuth } from '../../hooks/useAuth';
+import type { Topic, Content, Lesson } from '../../lib/db';
 import {
   createTopic,
   createContent,
@@ -18,12 +18,12 @@ import {
   reorderTopics,
   reorderContents,
   reorderLessons,
-} from '../lib/db';
+} from '../../lib/db';
 import { DragDropContext, Droppable, Draggable, type DropResult } from '@hello-pangea/dnd';
 import { GripVertical, ChevronRight, Pencil, Trash2, Plus, ArrowLeft } from 'lucide-react';
 import { motion } from 'framer-motion';
-import { ConfirmDialog } from '../components/ConfirmDialog';
-import { TOPIC_CATEGORIES, DIFFICULTY_LEVELS } from '../lib/courseUtils';
+import { ConfirmDialog } from '../../components/ConfirmDialog';
+import { TOPIC_CATEGORIES, DIFFICULTY_LEVELS } from '../../lib/courseUtils';
 
 export function DashboardPage() {
   const { signOutUser, user } = useAuth();

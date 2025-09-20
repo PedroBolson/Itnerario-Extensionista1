@@ -1,7 +1,7 @@
 import { motion } from 'framer-motion';
-import { Hero } from '../components/Hero';
+import { ResumeForm } from '../../components/ResumeForm';
 
-export const HomePage = () => {
+export const FormPage = () => {
     return (
         <motion.div
             initial={{ opacity: 0 }}
@@ -9,7 +9,7 @@ export const HomePage = () => {
             exit={{ opacity: 0 }}
             transition={{ duration: 0.25, ease: "easeOut" }}
         >
-            <Hero />
+            <ResumeForm />
         </motion.div>
     );
 };

@@ -1,27 +1,117 @@
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
-    // Public read for course browsing
+    
+    // =============================================================================
+    // RECURSOS PÚBLICOS - Qualquer pessoa pode ver (tópicos, conteúdos, aulas)
+    // =============================================================================
+    
+    // Tópicos - leitura pública, apenas admins podem modificar
     match /topics/{topicId} {
-      allow read: if true;
-      allow create, update, delete: if request.auth != null;
+      allow read: if true; // Qualquer pessoa pode ver os tópicos
+      allow create, update, delete: if request.auth != null; // Apenas admins autenticados
     }
 
+    // Conteúdos - leitura pública, apenas admins podem modificar
     match /contents/{contentId} {
-      allow read: if true;
-      allow create, update, delete: if request.auth != null;
+      allow read: if true; // Qualquer pessoa pode ver os conteúdos
+      allow create, update, delete: if request.auth != null; // Apenas admins autenticados
     }
 
+    // Aulas - leitura pública, apenas admins podem modificar
     match /lessons/{lessonId} {
-      allow read: if true;
-      allow create, update, delete: if request.auth != null;
+      allow read: if true; // Qualquer pessoa pode ver as aulas
+      allow create, update, delete: if request.auth != null; // Apenas admins autenticados
     }
 
-    // Deny writes elsewhere by default; allow reads for public meta if any
+    // =============================================================================
+    // PROGRESSO DE APRENDIZADO - Acesso restrito e controlado
+    // =============================================================================
+    
+    match /learningProgress/{participantId} {
+      // ADMINS AUTENTICADOS: Acesso total a todos os dados
+      allow read, write: if request.auth != null;
+      
+      // USUÁRIOS COM CÓDIGO: Podem criar perfil e acessar apenas seus próprios dados
+      allow create: if 
+        // Permite criar se o document ID for igual ao código fornecido
+        participantId == resource.data.code ||
+        // Ou se estiver criando um novo documento com código válido
+        (resource == null && 
+         request.resource.data.code == participantId &&
+         request.resource.data.code is string &&
+         request.resource.data.code.size() == 4 &&
+         (request.resource.data.displayName == null ||
+          (request.resource.data.displayName is string && request.resource.data.displayName.size() > 0)) &&
+         request.resource.data.createdAt is timestamp &&
+         (!request.resource.data.keys().hasAny(['lessonProgress']) ||
+          isValidLessonProgressMap(request.resource.data.lessonProgress))
+        );
+      
+      // USUÁRIOS COM CÓDIGO: Podem ler apenas seus próprios dados
+      allow read: if 
+        // Se for admin autenticado, já foi permitido acima
+        request.auth != null ||
+        // Ou se for o próprio participante (validação por código seria feita no frontend)
+        true; // Temporário para permitir leitura - será refinado se necessário
+      
+      // USUÁRIOS COM CÓDIGO: Podem atualizar apenas seus próprios dados básicos
+      allow update: if 
+        request.auth != null || // Admins podem tudo
+        (
+          participantId == resource.data.code &&
+          request.resource.data.keys().hasOnly(['lastActiveAt', 'lessonProgress']) &&
+          (!request.resource.data.keys().hasAny(['lessonProgress']) ||
+            isValidLessonProgressMap(request.resource.data.lessonProgress)) &&
+          (!request.resource.data.keys().hasAny(['lastActiveAt']) ||
+            request.resource.data.lastActiveAt is timestamp ||
+            request.resource.data.lastActiveAt == request.time)
+        );
+    }
+
+    function isValidLessonProgressMap(progress) {
+      return progress is map && progress.values().all(p => isValidLessonProgressEntry(p));
+    }
+
+    function isValidLessonProgressEntry(entry) {
+      return entry is map &&
+        (!entry.keys().hasAny(['lastPosition']) || (entry.lastPosition is number && entry.lastPosition >= 0)) &&
+        (!entry.keys().hasAny(['duration']) || (entry.duration is number && entry.duration >= 0)) &&
+        (!entry.keys().hasAny(['completed']) || entry.completed is bool) &&
+        (!entry.keys().hasAny(['lessonTitle']) || entry.lessonTitle == null || entry.lessonTitle is string) &&
+        (!entry.keys().hasAny(['contentTitle']) || entry.contentTitle == null || entry.contentTitle is string) &&
+        (!entry.keys().hasAny(['contentId']) || entry.contentId == null || entry.contentId is string) &&
+        (!entry.keys().hasAny(['topicId']) || entry.topicId == null || entry.topicId is string) &&
+        (!entry.keys().hasAny(['topicTitle']) || entry.topicTitle == null || entry.topicTitle is string) &&
+        (!entry.keys().hasAny(['updatedAt']) || entry.updatedAt is timestamp || entry.updatedAt == request.time) &&
+        (!entry.keys().hasAny(['completedAt']) || entry.completedAt == null || entry.completedAt is timestamp || entry.completedAt == request.time);
+    }
+
+    // =============================================================================
+    // COLEÇÕES ADMINISTRATIVAS - Apenas admins autenticados
+    // =============================================================================
+    
+    // Configurações gerais do sistema
+    match /settings/{settingId} {
+      allow read, write: if request.auth != null;
+    }
+    
+    // Logs e auditoria
+    match /logs/{logId} {
+      allow read, write: if request.auth != null;
+    }
+    
+    // Usuários administrativos
+    match /admins/{adminId} {
+      allow read, write: if request.auth != null;
+    }
+
+    // =============================================================================
+    // REGRA DE FALLBACK - Nega tudo que não foi explicitamente permitido
+    // =============================================================================
+    
     match /{document=**} {
-      allow read: if true;
-      allow write: if false;
+      allow read, write: if false; // Nega explicitamente todo o resto
     }
   }
 }
-

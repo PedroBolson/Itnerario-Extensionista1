@@ -48,6 +48,7 @@ export type Lesson = {
   youtubeUrl: string;
   order?: number;
   createdAt?: Timestamp;
+  description?: string;
 };
 
 // Collection refs

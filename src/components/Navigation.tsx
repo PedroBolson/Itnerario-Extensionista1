@@ -33,12 +33,36 @@ export default function Navigation() {
         </svg>
     );
 
-    const navItems = useMemo(() => [
-        { path: '/', icon: HomeIcon, label: 'Início', color: 'bg-blue-500' },
-        { path: '/cursos', icon: AcademicIcon, label: 'Mini Cursos', color: 'bg-orange-500' },
-        { path: '/tutorial', icon: BookIcon, label: 'Dicas de Currículo', color: 'bg-green-500' },
-        { path: '/criar-cv', icon: UserIcon, label: 'Criar Currículo', color: 'bg-purple-500' }
-    ], []);
+    const DashboardIcon = () => (
+        <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2H5a2 2 0 00-2-2z" />
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 5a2 2 0 012-2h4a2 2 0 012 2v6a2 2 0 01-2 2H10a2 2 0 01-2-2V5z" />
+        </svg>
+    );
+
+    const UsersIcon = () => (
+        <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197m13.5-9a2.25 2.25 0 11-4.5 0 2.25 2.25 0 014.5 0z" />
+        </svg>
+    );
+
+    const isAdminRoute = location.pathname.startsWith('/dashboard') || location.pathname.startsWith('/admin');
+
+    const navItems = useMemo(() => {
+        if (isAdminRoute) {
+            return [
+                { path: '/dashboard', icon: DashboardIcon, label: 'Dashboard', color: 'bg-blue-500' },
+                { path: '/dashboard/participants', icon: UsersIcon, label: 'Participantes', color: 'bg-green-500' },
+            ];
+        }
+
+        return [
+            { path: '/', icon: HomeIcon, label: 'Início', color: 'bg-blue-500' },
+            { path: '/cursos', icon: AcademicIcon, label: 'Mini Cursos', color: 'bg-orange-500' },
+            { path: '/tutorial', icon: BookIcon, label: 'Dicas de Currículo', color: 'bg-green-500' },
+            { path: '/criar-cv', icon: UserIcon, label: 'Criar Currículo', color: 'bg-purple-500' }
+        ];
+    }, [isAdminRoute]);
 
     const handleNavigation = (path: string) => {
         navigate(path);
@@ -123,8 +147,8 @@ export default function Navigation() {
                     {/* Linha 1 */}
                     <span
                         className={`absolute w-5 h-0.5 bg-gray-800 dark:bg-white rounded-full transition-all duration-300 ease-out ${isMobileMenuOpen
-                                ? 'top-3 left-0.5 rotate-45'
-                                : 'top-2 left-0.5'
+                            ? 'top-3 left-0.5 rotate-45'
+                            : 'top-2 left-0.5'
                             }`}
                     />
                     {/* Linha 2 */}
@@ -135,8 +159,8 @@ export default function Navigation() {
                     {/* Linha 3 */}
                     <span
                         className={`absolute w-5 h-0.5 bg-gray-800 dark:bg-white rounded-full transition-all duration-300 ease-out ${isMobileMenuOpen
-                                ? 'top-3 left-0.5 -rotate-45'
-                                : 'top-4 left-0.5'
+                            ? 'top-3 left-0.5 -rotate-45'
+                            : 'top-4 left-0.5'
                             }`}
                     />
                 </div>
