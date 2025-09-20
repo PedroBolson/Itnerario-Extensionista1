@@ -5,10 +5,7 @@ import {
   BookOpen,
   ChevronRight,
   LayoutGrid,
-  Pencil,
   Plus,
-  Trash2,
-  Video,
 } from 'lucide-react';
 import type { Topic, Content, Lesson } from '../../lib/db';
 import {
@@ -29,20 +26,20 @@ import {
   reorderLessons,
 } from '../../lib/db';
 
-import { CourseImage } from '../../components/CourseImage';
-import { CategoryIcon } from '../../components/CategoryIcon';
 import {
   TOPIC_CATEGORIES,
   DIFFICULTY_LEVELS,
   getCategoryInfo,
-  getDifficultyInfo,
-  generateColorFromString,
   type TopicCategory,
   type DifficultyLevel,
 } from '../../lib/courseUtils';
 import { YouTubePlayer } from '../../components/YouTubePlayer';
 import { ConfirmDialog } from '../../components/ConfirmDialog';
 import { AdminModal } from '../../components/AdminModal';
+import { TopicCard } from '../../components/shared/TopicCard';
+import { ContentCard } from '../../components/shared/ContentCard';
+import { LessonCard, AdminLessonDetails } from '../../components/shared/LessonCard';
+import { SearchInput } from '../../components/shared/SearchInput';
 
 interface TopicFormState {
   name: string;
@@ -387,11 +384,11 @@ export function DashboardPage() {
                   <p className="text-sm text-theme-secondary">Selecione um tópico para ver seus cursos ou reordene arrastando os cards.</p>
                 </div>
                 <div className="flex flex-wrap items-center gap-2">
-                  <input
-                    placeholder="Buscar tópicos"
+                  <SearchInput
                     value={topicQuery}
-                    onChange={(event) => setTopicQuery(event.target.value)}
-                    className="px-3 py-2 rounded-xl border border-theme bg-theme-base text-sm min-w-[220px]"
+                    onChange={setTopicQuery}
+                    placeholder="Buscar tópicos"
+                    className="min-w-[220px] text-sm"
                   />
                   <button
                     onClick={() => openForm({ entity: 'topic', mode: 'create' })}
@@ -410,77 +407,28 @@ export function DashboardPage() {
                     {...droppableProvided.droppableProps}
                     className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4"
                   >
-                    {filteredTopics.map((topic, index) => {
-                      const categoryInfo = getCategoryInfo(topic.category);
-                      return (
-                        <Draggable draggableId={topic.id} index={index} key={topic.id}>
-                          {(provided) => (
-                            <div
-                              ref={provided.innerRef}
-                              {...provided.draggableProps}
-                              {...provided.dragHandleProps}
-                              className={`group relative overflow-hidden rounded-2xl border bg-theme-surface text-left hover:shadow-lg cursor-grab active:cursor-grabbing ${selectedTopicId === topic.id
-                                ? 'ring-2 ring-blue-500 border-blue-500'
-                                : 'border-theme hover:border-gray-300'
-                                }`}
-                              onClick={() => {
-                                setSelectedTopicId(topic.id);
-                                setSelectedContentId('');
-                                setActiveLessonId('');
-                              }}
-                            >
-                              <div className="relative">
-                                <CourseImage
-                                  src={topic.coverImageUrl}
-                                  alt={topic.name}
-                                  fallbackColor={topic.color || generateColorFromString(topic.name)}
-                                  fallbackIcon={categoryInfo.icon}
-                                  aspectRatio="video"
-                                  className="group-hover:scale-105 transition-transform duration-300"
-                                />
-
-                                <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-black/20 to-transparent rounded-xl" />
-
-                                <div
-                                  className="absolute top-3 right-3 px-2 py-1 rounded-full text-xs font-medium text-white backdrop-blur-sm flex items-center gap-1"
-                                  style={{ backgroundColor: categoryInfo.color + '90' }}
-                                >
-                                  <CategoryIcon Icon={categoryInfo.icon} size={12} />
-                                  <span>{categoryInfo.name}</span>
-                                </div>
-
-                                <div className="absolute top-3 left-3 flex gap-2">
-                                  <button
-                                    type="button"
-                                    onClick={(event) => {
-                                      event.stopPropagation();
-                                      openForm({ entity: 'topic', mode: 'edit', item: topic });
-                                    }}
-                                    className="inline-flex h-8 w-8 items-center justify-center rounded-full bg-black/40 text-white/80 hover:bg-black/60 backdrop-blur-sm"
-                                  >
-                                    <Pencil size={14} />
-                                  </button>
-                                  <button
-                                    type="button"
-                                    onClick={(event) => {
-                                      event.stopPropagation();
-                                      confirmDeletion({ entity: 'topic', item: topic });
-                                    }}
-                                    className="inline-flex h-8 w-8 items-center justify-center rounded-full bg-red-500/70 text-white hover:bg-red-500 backdrop-blur-sm"
-                                  >
-                                    <Trash2 size={14} />
-                                  </button>
-                                </div>
-
-                                <div className="absolute bottom-0 left-0 right-0 p-4">
-                                  <h3 className="font-semibold text-white text-lg leading-tight">{topic.name}</h3>
-                                </div>
-                              </div>
-                            </div>
-                          )}
-                        </Draggable>
-                      );
-                    })}
+                    {filteredTopics.map((topic, index) => (
+                      <Draggable draggableId={topic.id} index={index} key={topic.id}>
+                        {(provided) => (
+                          <TopicCard
+                            topic={topic}
+                            isSelected={selectedTopicId === topic.id}
+                            onClick={(topic) => {
+                              setSelectedTopicId(topic.id);
+                              setSelectedContentId('');
+                              setActiveLessonId('');
+                            }}
+                            onEdit={(topic) => openForm({ entity: 'topic', mode: 'edit', item: topic })}
+                            onDelete={(topic) => confirmDeletion({ entity: 'topic', item: topic })}
+                            dragProps={{
+                              ref: provided.innerRef,
+                              ...provided.draggableProps,
+                              ...provided.dragHandleProps,
+                            }}
+                          />
+                        )}
+                      </Draggable>
+                    ))}
                     {droppableProvided.placeholder}
                   </div>
                 )}
@@ -507,11 +455,11 @@ export function DashboardPage() {
                   <span className="text-theme-primary font-medium">{activeTopic.name}</span>
                 </div>
                 <div className="flex flex-wrap items-center gap-2">
-                  <input
-                    placeholder="Buscar cursos"
+                  <SearchInput
                     value={contentQuery}
-                    onChange={(event) => setContentQuery(event.target.value)}
-                    className="px-3 py-2 rounded-xl border border-theme bg-theme-base text-sm min-w-[220px]"
+                    onChange={setContentQuery}
+                    placeholder="Buscar cursos"
+                    className="min-w-[220px] text-sm"
                   />
                   <button
                     onClick={() => openForm({ entity: 'content', mode: 'create' })}
@@ -530,79 +478,27 @@ export function DashboardPage() {
                     {...droppableProvided.droppableProps}
                     className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6"
                   >
-                    {filteredContents.map((content, index) => {
-                      const difficulty = getDifficultyInfo(content.difficulty);
-                      return (
-                        <Draggable draggableId={content.id} index={index} key={content.id}>
-                          {(provided) => (
-                            <div
-                              ref={provided.innerRef}
-                              {...provided.draggableProps}
-                              {...provided.dragHandleProps}
-                              className={`group relative overflow-hidden rounded-2xl border bg-theme-surface text-left hover:shadow-lg cursor-grab active:cursor-grabbing ${selectedContentId === content.id
-                                ? 'ring-2 ring-blue-500 border-blue-500'
-                                : 'border-theme hover:border-gray-300'
-                                }`}
-                              onClick={() => {
-                                setSelectedContentId(content.id);
-                                setActiveLessonId('');
-                              }}
-                            >
-                              <div className="relative overflow-hidden">
-                                <CourseImage
-                                  src={content.coverImageUrl}
-                                  alt={content.title}
-                                  fallbackColor={generateColorFromString(content.title)}
-                                  fallbackIcon={difficulty.icon}
-                                  aspectRatio="video"
-                                  className="group-hover:scale-105 transition-transform duration-300"
-                                />
-
-                                <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-black/20 to-transparent rounded-xl" />
-
-                                <div
-                                  className="absolute top-3 right-3 px-2 py-1 rounded-full text-xs font-medium text-white backdrop-blur-sm flex items-center gap-1"
-                                  style={{ backgroundColor: difficulty.color + '90' }}
-                                >
-                                  <CategoryIcon Icon={difficulty.icon} size={12} />
-                                  <span>{difficulty.name}</span>
-                                </div>
-
-
-
-                                <div className="absolute bottom-3 right-3 flex gap-2">
-                                  <button
-                                    onClick={(event) => {
-                                      event.stopPropagation();
-                                      openForm({ entity: 'content', mode: 'edit', item: content });
-                                    }}
-                                    className="inline-flex h-8 w-8 items-center justify-center rounded-full bg-black/40 text-white/80 hover:bg-black/60 backdrop-blur-sm"
-                                  >
-                                    <Pencil size={14} />
-                                  </button>
-                                  <button
-                                    onClick={(event) => {
-                                      event.stopPropagation();
-                                      confirmDeletion({ entity: 'content', item: content });
-                                    }}
-                                    className="inline-flex h-8 w-8 items-center justify-center rounded-full bg-red-500/70 text-white hover:bg-red-500 backdrop-blur-sm"
-                                  >
-                                    <Trash2 size={14} />
-                                  </button>
-                                </div>
-                              </div>
-
-                              <div className="p-4 space-y-2">
-                                <h3 className="font-semibold text-base leading-tight line-clamp-2">{content.title}</h3>
-                                {content.description && (
-                                  <p className="text-sm text-theme-secondary line-clamp-3">{content.description}</p>
-                                )}
-                              </div>
-                            </div>
-                          )}
-                        </Draggable>
-                      );
-                    })}
+                    {filteredContents.map((content, index) => (
+                      <Draggable draggableId={content.id} index={index} key={content.id}>
+                        {(provided) => (
+                          <ContentCard
+                            content={content}
+                            isSelected={selectedContentId === content.id}
+                            onClick={(content) => {
+                              setSelectedContentId(content.id);
+                              setActiveLessonId('');
+                            }}
+                            onEdit={(content) => openForm({ entity: 'content', mode: 'edit', item: content })}
+                            onDelete={(content) => confirmDeletion({ entity: 'content', item: content })}
+                            dragProps={{
+                              ref: provided.innerRef,
+                              ...provided.draggableProps,
+                              ...provided.dragHandleProps,
+                            }}
+                          />
+                        )}
+                      </Draggable>
+                    ))}
                     {droppableProvided.placeholder}
                   </div>
                 )}
@@ -659,29 +555,11 @@ export function DashboardPage() {
                     )}
                   </div>
                   {activeLesson && (
-                    <div className="rounded-xl border border-theme bg-theme-surface px-4 py-3 flex flex-wrap items-center justify-between gap-3">
-                      <div>
-                        <div className="font-medium text-theme-primary">{activeLesson.title}</div>
-                        <div className="text-xs text-theme-secondary flex items-center gap-2">
-                          <Video size={14} className="text-red-500" />
-                          {activeLesson.youtubeUrl}
-                        </div>
-                      </div>
-                      <div className="flex items-center gap-2">
-                        <button
-                          onClick={() => openForm({ entity: 'lesson', mode: 'edit', item: activeLesson })}
-                          className="px-3 py-2 rounded-xl border border-theme text-theme-secondary hover:text-theme-primary"
-                        >
-                          Editar aula
-                        </button>
-                        <button
-                          onClick={() => confirmDeletion({ entity: 'lesson', item: activeLesson })}
-                          className="px-3 py-2 rounded-xl border border-red-500 text-red-500 hover:bg-red-500/10"
-                        >
-                          Remover
-                        </button>
-                      </div>
-                    </div>
+                    <AdminLessonDetails
+                      lesson={activeLesson}
+                      onEdit={(lesson) => openForm({ entity: 'lesson', mode: 'edit', item: lesson })}
+                      onDelete={(lesson) => confirmDeletion({ entity: 'lesson', item: lesson })}
+                    />
                   )}
                 </div>
                 <aside className="rounded-2xl border border-theme bg-theme-surface p-4">
@@ -695,16 +573,17 @@ export function DashboardPage() {
                         {lessons.map((lesson, index) => (
                           <Draggable draggableId={lesson.id} index={index} key={lesson.id}>
                             {(provided) => (
-                              <div
-                                ref={provided.innerRef}
-                                {...provided.draggableProps}
-                                {...provided.dragHandleProps}
-                                className={`p-3 rounded-xl border ${lesson.id === activeLessonId ? 'border-blue-500 bg-blue-500/5' : 'border-theme bg-theme-base'} cursor-grab active:cursor-grabbing transition-colors`}
+                              <LessonCard
+                                lesson={lesson}
+                                index={index}
+                                isActive={lesson.id === activeLessonId}
                                 onClick={() => setActiveLessonId(lesson.id)}
-                              >
-                                <div className="text-sm font-medium text-theme-primary">{lesson.title}</div>
-                                <div className="text-xs text-theme-secondary line-clamp-2">{lesson.description || 'Sem descrição'}</div>
-                              </div>
+                                dragProps={{
+                                  ref: provided.innerRef,
+                                  ...provided.draggableProps,
+                                  ...provided.dragHandleProps,
+                                }}
+                              />
                             )}
                           </Draggable>
                         ))}

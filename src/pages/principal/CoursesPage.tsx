@@ -2,13 +2,15 @@ import { useEffect, useMemo, useState } from 'react';
 import type { Topic, Content, Lesson } from '../../lib/db';
 import { listAllTopics, listContentsByTopic, listLessonsByContent } from '../../lib/db';
 import { YouTubePlayer } from '../../components/YouTubePlayer';
-import { CourseImage } from '../../components/CourseImage';
 import { CategoryIcon } from '../../components/CategoryIcon';
 import { motion, AnimatePresence } from 'framer-motion';
-import { getCategoryInfo, getDifficultyInfo, generateColorFromString } from '../../lib/courseUtils';
 import { Home, Search, Clock, ChevronRight, BookOpen, CheckCircle2, User, LogOut } from 'lucide-react';
 import { useLearner } from '../../context/LearnerContext';
 import { LearnerAccess } from '../../components/LearnerAccess';
+import { TopicCard } from '../../components/shared/TopicCard';
+import { ContentCard } from '../../components/shared/ContentCard';
+import { LessonCard } from '../../components/shared/LessonCard';
+import { SearchInput } from '../../components/shared/SearchInput';
 
 export function CoursesPage() {
   const { learner, progress, setLearner } = useLearner();
@@ -96,7 +98,7 @@ export function CoursesPage() {
                 </div>
               </div>
               <button
-                onClick={() => { setLearner(null); setShowLearnerAccess(true); }}
+                onClick={() => setLearner(null)}
                 className="px-3 py-2 rounded-xl border border-theme text-theme-secondary hover:text-theme-primary hover:border-theme-primary transition-colors flex items-center gap-2"
               >
                 <LogOut size={16} />
@@ -109,7 +111,7 @@ export function CoursesPage() {
               className="px-4 py-2 bg-blue-500 text-white rounded-xl hover:bg-blue-600 transition-colors flex items-center gap-2"
             >
               <User size={16} />
-              Acessar Progresso
+              Rastreio de progresso
             </button>
           )}
         </header>
@@ -122,59 +124,25 @@ export function CoursesPage() {
                   <h2 className="text-lg font-semibold">Escolha um tópico</h2>
                   <p className="text-sm text-theme-secondary">Explore diferentes áreas de conhecimento</p>
                 </div>
-                <input
-                  placeholder="Buscar tópicos..."
-                  className="px-4 py-2 rounded-xl bg-theme-surface border border-theme text-theme-primary w-80 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  value={topicQuery}
-                  onChange={(e) => setTopicQuery(e.target.value)}
-                />
+                <div className="flex items-center justify-center">
+                  <SearchInput
+                    value={topicQuery}
+                    onChange={setTopicQuery}
+                    placeholder="Buscar tópicos..."
+                    className="w-80"
+                  />
+                </div>
               </div>
               <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4">
-                {filteredTopics.map((t) => {
-                  const categoryInfo = getCategoryInfo(t.category);
-                  const fallbackColor = t.color || generateColorFromString(t.name);
-
-                  return (
-                    <motion.button
-                      key={t.id}
-                      whileHover={{ scale: 1.03, y: -4 }}
-                      whileTap={{ scale: 0.98 }}
-                      className={`group relative overflow-hidden rounded-2xl border bg-theme-surface text-left transition-all duration-300 ${selectedTopicId === t.id
-                        ? 'ring-2 ring-blue-500 border-blue-500'
-                        : 'border-theme hover:border-gray-300 hover:shadow-lg'
-                        }`}
-                      onClick={() => { setSelectedTopicId(t.id); setTopicQuery(''); }}
-                    >
-                      <div className="relative">
-                        <CourseImage
-                          src={t.coverImageUrl}
-                          alt={t.name}
-                          fallbackColor={fallbackColor}
-                          fallbackIcon={categoryInfo.icon}
-                          aspectRatio="video"
-                          className="group-hover:scale-105 transition-transform duration-300"
-                        />
-
-                        {/* Overlay com gradiente */}
-                        <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-black/20 to-transparent rounded-xl" />
-
-                        {/* Badge de categoria */}
-                        <div
-                          className="absolute top-3 right-3 px-2 py-1 rounded-full text-xs font-medium text-white backdrop-blur-sm flex items-center gap-1"
-                          style={{ backgroundColor: categoryInfo.color + '90' }}
-                        >
-                          <CategoryIcon Icon={categoryInfo.icon} size={12} />
-                          <span>{categoryInfo.name}</span>
-                        </div>
-
-                        {/* Título sobreposto */}
-                        <div className="absolute bottom-0 left-0 right-0 p-4">
-                          <h3 className="font-semibold text-white text-lg leading-tight">{t.name}</h3>
-                        </div>
-                      </div>
-                    </motion.button>
-                  );
-                })}
+                {filteredTopics.map((t) => (
+                  <TopicCard
+                    key={t.id}
+                    topic={t}
+                    isSelected={selectedTopicId === t.id}
+                    onClick={() => { setSelectedTopicId(t.id); setTopicQuery(''); }}
+                    enableMotion={true}
+                  />
+                ))}
                 {filteredTopics.length === 0 && (
                   <div className="col-span-full text-center py-12">
                     <Search size={64} className="mx-auto mb-4 text-theme-secondary opacity-50" />
@@ -204,64 +172,23 @@ export function CoursesPage() {
                   <h2 className="text-xl font-semibold">Cursos disponíveis</h2>
                   <p className="text-sm text-theme-secondary">Escolha um curso para começar sua jornada de aprendizado</p>
                 </div>
-                <input
-                  placeholder="Buscar cursos..."
-                  className="px-4 py-2 rounded-xl bg-theme-surface border border-theme text-theme-primary w-80 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                <SearchInput
                   value={contentQuery}
-                  onChange={(e) => setContentQuery(e.target.value)}
+                  onChange={setContentQuery}
+                  placeholder="Buscar cursos..."
+                  className="w-80"
                 />
               </div>
               <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6">
-                {filteredContents.map((c) => {
-                  const difficultyInfo = getDifficultyInfo(c.difficulty);
-
-                  return (
-                    <motion.button
-                      key={c.id}
-                      whileHover={{ scale: 1.03, y: -4 }}
-                      whileTap={{ scale: 0.98 }}
-                      className={`group relative overflow-hidden rounded-2xl border bg-theme-surface text-left transition-all duration-300 ${selectedContentId === c.id
-                        ? 'ring-2 ring-blue-500 border-blue-500'
-                        : 'border-theme hover:border-gray-300 hover:shadow-lg'
-                        }`}
-                      onClick={() => { setSelectedContentId(c.id); }}
-                    >
-                      <div className="relative">
-                        <CourseImage
-                          src={c.coverImageUrl}
-                          alt={c.title}
-                          fallbackColor={generateColorFromString(c.title)}
-                          fallbackIcon={difficultyInfo.icon}
-                          aspectRatio="video"
-                          className="group-hover:scale-105 transition-transform duration-300"
-                        />
-
-                        {/* Overlay com gradiente */}
-                        <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-black/20 to-transparent rounded-xl" />
-
-                        {/* Badge de dificuldade */}
-                        <div
-                          className="absolute top-3 right-3 px-2 py-1 rounded-full text-xs font-medium text-white backdrop-blur-sm flex items-center gap-1"
-                          style={{ backgroundColor: difficultyInfo.color + '90' }}
-                        >
-                          <CategoryIcon Icon={difficultyInfo.icon} size={12} />
-                          <span>{difficultyInfo.name}</span>
-                        </div>
-
-                        {/* Duração (se disponível) */}
-
-                      </div>
-
-                      {/* Informações do curso */}
-                      <div className="p-4 space-y-2">
-                        <h3 className="font-semibold text-base leading-tight line-clamp-2">{c.title}</h3>
-                        {c.description && (
-                          <p className="text-sm text-theme-secondary line-clamp-3">{c.description}</p>
-                        )}
-                      </div>
-                    </motion.button>
-                  );
-                })}
+                {filteredContents.map((c) => (
+                  <ContentCard
+                    key={c.id}
+                    content={c}
+                    isSelected={selectedContentId === c.id}
+                    onClick={() => setSelectedContentId(c.id)}
+                    enableMotion={true}
+                  />
+                ))}
                 {filteredContents.length === 0 && (
                   <div className="col-span-full text-center py-12">
                     <BookOpen size={64} className="mx-auto mb-4 text-theme-secondary opacity-50" />
@@ -345,40 +272,21 @@ export function CoursesPage() {
                     <h3 className="font-medium mb-2">Aulas</h3>
                     {lessons.length === 0 && <div className="text-sm text-theme-secondary">Nenhuma aula</div>}
                     <ul className="space-y-2">
-                      {lessons.map((l, idx) => {
-                        const lessonProgressData = progressByLesson[l.id];
-                        const isCompleted = lessonProgressData?.completed || false;
-                        const progressPercent = lessonProgressData && lessonProgressData.duration > 0 ?
-                          Math.round((lessonProgressData.lastPosition / lessonProgressData.duration) * 100) : 0;
-
-                        return (
-                          <li key={l.id}>
-                            <button onClick={() => setActiveLessonId(l.id)} className={`w-full text-left px-3 py-2 rounded-xl border transition-colors ${l.id === activeLessonId ? 'btn-primary' : 'border-theme bg-theme-surface text-theme-primary hover:bg-theme-surface-hover'}`}>
-                              <div className="flex items-center gap-2">
-                                <span className={`inline-flex items-center justify-center w-6 h-6 text-xs rounded-full border ${isCompleted ? 'bg-green-500 border-green-500 text-white' :
-                                  l.id === activeLessonId ? 'border-white/50' : 'border-theme'
-                                  }`}>
-                                  {isCompleted ? <CheckCircle2 size={12} /> : idx + 1}
-                                </span>
-                                <div className="min-w-0 flex-1">
-                                  <div className="text-sm font-medium truncate">{l.title}</div>
-                                  <div className="text-xs opacity-80 truncate">
-                                    {lessonProgressData ? `${progressPercent}% assistido` : 'Pronto para começar'}
-                                  </div>
-                                </div>
-                              </div>
-                              {lessonProgressData && progressPercent > 0 && (
-                                <div className="mt-1 w-full bg-gray-200 rounded-full h-1">
-                                  <div
-                                    className={`h-1 rounded-full transition-all ${isCompleted ? 'bg-green-500' : 'bg-blue-500'}`}
-                                    style={{ width: `${progressPercent}%` }}
-                                  />
-                                </div>
-                              )}
-                            </button>
-                          </li>
-                        );
-                      })}
+                      {lessons.map((l, idx) => (
+                        <LessonCard
+                          key={l.id}
+                          lesson={l}
+                          index={idx}
+                          isActive={l.id === activeLessonId}
+                          onClick={() => setActiveLessonId(l.id)}
+                          progressData={progressByLesson[l.id] ? {
+                            completed: progressByLesson[l.id].completed,
+                            lastPosition: progressByLesson[l.id].lastPosition,
+                            duration: progressByLesson[l.id].duration
+                          } : undefined}
+                          showProgress={true}
+                        />
+                      ))}
                     </ul>
                   </div>
                 </aside>

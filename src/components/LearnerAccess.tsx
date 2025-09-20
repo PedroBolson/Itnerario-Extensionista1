@@ -137,7 +137,7 @@ export function LearnerAccess({ isOpen, onClose }: LearnerAccessProps) {
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
             <div className="bg-theme-surface border border-theme rounded-2xl p-6 w-full max-w-md">
                 <div className="flex items-center justify-between mb-6">
-                    <h2 className="text-lg font-semibold">Acessar Progresso</h2>
+                    <h2 className="text-lg font-semibold">Rastreio de progresso</h2>
                     <button onClick={handleClose} className="text-theme-secondary hover:text-theme-primary">
                         <X size={20} />
                     </button>
@@ -146,7 +146,7 @@ export function LearnerAccess({ isOpen, onClose }: LearnerAccessProps) {
                 {mode === 'choose' && (
                     <div className="space-y-4">
                         <p className="text-sm text-theme-secondary mb-6">
-                            Escolha uma opção para acompanhar seu progresso nas aulas:
+                            Para rastrear seu progresso nas aulas, escolha uma das opções abaixo:
                         </p>
 
                         <button
@@ -171,7 +171,7 @@ export function LearnerAccess({ isOpen, onClose }: LearnerAccessProps) {
                             </div>
                             <div className="text-left">
                                 <div className="font-medium">Usar código existente</div>
-                                <div className="text-sm text-theme-secondary">Acesse seu progresso com o código</div>
+                                <div className="text-sm text-theme-secondary">Continue acompanhando com seu código</div>
                             </div>
                         </button>
                     </div>
@@ -248,7 +248,7 @@ export function LearnerAccess({ isOpen, onClose }: LearnerAccessProps) {
                             disabled={code.length !== 4 || isLoading}
                             className="w-full px-4 py-2 bg-green-500 text-white rounded-lg hover:bg-green-600 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
                         >
-                            {isLoading ? 'Acessando...' : 'Acessar Meu Progresso'}
+                            {isLoading ? 'Acessando...' : 'Acessar Rastreio'}
                         </button>
                     </div>
                 )}
