@@ -50,7 +50,7 @@ export function LoginPage() {
 
     try {
       await sendPasswordResetEmail(auth, email.trim());
-      setSuccess('Email de recuperação enviado! Verifique sua caixa de entrada.');
+      setSuccess('Email de recuperação enviado! Verifique sua caixa de entrada. Se preciso verifique também a caixa de spam.');
       setIsRecoveryMode(false);
     } catch (err: any) {
       let errorMessage = 'Erro ao enviar email de recuperação';

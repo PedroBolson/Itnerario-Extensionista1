@@ -119,17 +119,17 @@ export function CoursesPage() {
         <AnimatePresence mode="wait">
           {stage === 'topics' && (
             <motion.section key="topics" initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -8 }} className="space-y-4">
-              <div className="flex items-center justify-between gap-4">
+              <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
                 <div>
                   <h2 className="text-lg font-semibold">Escolha um tópico</h2>
                   <p className="text-sm text-theme-secondary">Explore diferentes áreas de conhecimento</p>
                 </div>
-                <div className="flex items-center justify-center">
+                <div className="w-full sm:w-auto">
                   <SearchInput
                     value={topicQuery}
                     onChange={setTopicQuery}
                     placeholder="Buscar tópicos..."
-                    className="w-80"
+                    className="w-full sm:w-80"
                   />
                 </div>
               </div>
@@ -156,7 +156,7 @@ export function CoursesPage() {
 
           {stage === 'contents' && (
             <motion.section key="contents" initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -8 }} className="space-y-4">
-              <div className="flex items-center justify-between gap-4">
+              <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
                 <div>
                   <nav className="flex items-center gap-2 mb-2 text-sm">
                     <button
@@ -172,12 +172,14 @@ export function CoursesPage() {
                   <h2 className="text-xl font-semibold">Cursos disponíveis</h2>
                   <p className="text-sm text-theme-secondary">Escolha um curso para começar sua jornada de aprendizado</p>
                 </div>
-                <SearchInput
-                  value={contentQuery}
-                  onChange={setContentQuery}
-                  placeholder="Buscar cursos..."
-                  className="w-80"
-                />
+                <div className="w-full sm:w-auto">
+                  <SearchInput
+                    value={contentQuery}
+                    onChange={setContentQuery}
+                    placeholder="Buscar cursos..."
+                    className="w-full sm:w-80"
+                  />
+                </div>
               </div>
               <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6">
                 {filteredContents.map((c) => (

@@ -153,7 +153,7 @@ export function CreateUserModal({
                             <AlertCircle size={16} className="text-amber-600 mt-0.5" />
                             <div className="text-sm text-theme-secondary">
                                 <div className="font-medium mb-1 text-theme-primary">Atenção:</div>
-                                <div>Após criar o usuário, você será deslogado e precisará fazer login novamente por motivos de segurança.</div>
+                                <div>Ao criar uma conta, você será redirecionado para a tela de login devido a limitações do fluxo padrão do Firebase.</div>
                             </div>
                         </div>
                     </div>

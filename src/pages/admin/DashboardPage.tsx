@@ -301,7 +301,7 @@ export function DashboardPage() {
       reorderContents(ordered.map((item) => item.id)).catch(console.error);
     }
 
-    if (type === 'LESSONS') {
+    if (type === 'LESSONS' && destination.droppableId.startsWith('admin-lessons')) {
       const ordered = Array.from(lessons);
       const [moved] = ordered.splice(source.index, 1);
       ordered.splice(destination.index, 0, moved);
@@ -471,7 +471,7 @@ export function DashboardPage() {
                 </div>
               </div>
 
-              <Droppable droppableId="admin-contents" type="CONTENTS">
+              <Droppable droppableId="admin-contents" direction="horizontal" type="CONTENTS">
                 {(droppableProvided) => (
                   <div
                     ref={droppableProvided.innerRef}
@@ -567,7 +567,7 @@ export function DashboardPage() {
                     <BookOpen size={16} />
                     Aulas do curso
                   </h3>
-                  <Droppable droppableId="admin-lessons" type="LESSONS">
+                  <Droppable droppableId={`admin-lessons-${activeContent.id}`} type="LESSONS">
                     {(droppableProvided) => (
                       <div ref={droppableProvided.innerRef} {...droppableProvided.droppableProps} className="space-y-2">
                         {lessons.map((lesson, index) => (
@@ -580,8 +580,8 @@ export function DashboardPage() {
                                 onClick={() => setActiveLessonId(lesson.id)}
                                 dragProps={{
                                   ref: provided.innerRef,
-                                  ...provided.draggableProps,
-                                  ...provided.dragHandleProps,
+                                  draggableProps: provided.draggableProps,
+                                  dragHandleProps: provided.dragHandleProps,
                                 }}
                               />
                             )}

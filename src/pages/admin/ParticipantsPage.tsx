@@ -184,7 +184,15 @@ export function ParticipantsPage() {
                 className="space-y-3"
               >
                 {filtered.map((participant) => {
-                  const daysSinceActive = Math.floor((Date.now() - participant.lastActive.getTime()) / (1000 * 60 * 60 * 24));
+                  // Calculate days difference properly considering calendar days, not just 24-hour periods
+                  const today = new Date();
+                  const lastActiveDate = new Date(participant.lastActive);
+
+                  // Reset time to beginning of day for accurate day comparison
+                  const todayStart = new Date(today.getFullYear(), today.getMonth(), today.getDate());
+                  const lastActiveStart = new Date(lastActiveDate.getFullYear(), lastActiveDate.getMonth(), lastActiveDate.getDate());
+
+                  const daysSinceActive = Math.floor((todayStart.getTime() - lastActiveStart.getTime()) / (1000 * 60 * 60 * 24));
                   const isRecentlyActive = daysSinceActive <= 7;
 
                   return (
