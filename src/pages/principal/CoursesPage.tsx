@@ -1,12 +1,12 @@
-import { useEffect, useMemo, useState } from 'react';
-import type { Topic, Content, Lesson } from '../../lib/db';
-import { listAllTopics, listContentsByTopic, listLessonsByContent } from '../../lib/db';
+import { useMemo, useState } from 'react';
 import { YouTubePlayer } from '../../components/YouTubePlayer';
 import { CategoryIcon } from '../../components/CategoryIcon';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Home, Search, Clock, ChevronRight, BookOpen, CheckCircle2, User, LogOut } from 'lucide-react';
 import { useLearner } from '../../context/LearnerContext';
+import { useRealtimeData } from '../../hooks/useRealtimeData';
 import { LearnerAccess } from '../../components/LearnerAccess';
+import { RealtimeIndicator } from '../../components/RealtimeIndicator';
 import { TopicCard } from '../../components/shared/TopicCard';
 import { ContentCard } from '../../components/shared/ContentCard';
 import { LessonCard } from '../../components/shared/LessonCard';
@@ -14,27 +14,22 @@ import { SearchInput } from '../../components/shared/SearchInput';
 
 export function CoursesPage() {
   const { learner, progress, setLearner } = useLearner();
-  const [topics, setTopics] = useState<Topic[]>([]);
-  const [selectedTopicId, setSelectedTopicId] = useState('');
-  const [contents, setContents] = useState<Content[]>([]);
-  const [selectedContentId, setSelectedContentId] = useState('');
-  const [lessons, setLessons] = useState<Lesson[]>([]);
-  const [activeLessonId, setActiveLessonId] = useState('');
+  const {
+    topics,
+    contents,
+    lessons,
+    selectedTopicId,
+    selectedContentId,
+    activeLessonId,
+    setSelectedTopicId,
+    setSelectedContentId,
+    setActiveLessonId,
+    lastUpdate
+  } = useRealtimeData();
+
   const [topicQuery, setTopicQuery] = useState('');
   const [contentQuery, setContentQuery] = useState('');
   const [showLearnerAccess, setShowLearnerAccess] = useState(false);
-
-  useEffect(() => { listAllTopics().then(setTopics); }, []);
-
-  useEffect(() => {
-    if (!selectedTopicId) { setContents([]); setSelectedContentId(''); setLessons([]); setActiveLessonId(''); return; }
-    listContentsByTopic(selectedTopicId).then(setContents);
-  }, [selectedTopicId]);
-
-  useEffect(() => {
-    if (!selectedContentId) { setLessons([]); setActiveLessonId(''); return; }
-    listLessonsByContent(selectedContentId).then((l) => { setLessons(l); if (l[0]) setActiveLessonId(l[0].id); });
-  }, [selectedContentId]);
 
   const activeLesson = useMemo(() => lessons.find(l => l.id === activeLessonId) || null, [lessons, activeLessonId]);
   const selectedTopicName = useMemo(() => topics.find(t => t.id === selectedTopicId)?.name || '', [topics, selectedTopicId]);
@@ -161,7 +156,7 @@ export function CoursesPage() {
                   <nav className="flex items-center gap-2 mb-2 text-sm">
                     <button
                       className="text-blue-500 hover:text-blue-600 flex items-center gap-1"
-                      onClick={() => { setSelectedTopicId(''); setSelectedContentId(''); setLessons([]); }}
+                      onClick={() => { setSelectedTopicId(''); setSelectedContentId(''); }}
                     >
                       <Home size={14} />
                       <span>Tópicos</span>
@@ -301,6 +296,10 @@ export function CoursesPage() {
       <LearnerAccess
         isOpen={showLearnerAccess}
         onClose={() => setShowLearnerAccess(false)}
+      />
+
+      <RealtimeIndicator
+        lastUpdate={lastUpdate}
       />
     </div>
   );
