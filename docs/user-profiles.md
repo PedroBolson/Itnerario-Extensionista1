@@ -1,36 +1,41 @@
-# Cadastro manual de usuários administradores
+# Cadastro manual de perfis de usuário
 
-Para manter o controle de cargos apenas via administradores, o app **não** cria documentos automaticamente na coleção `users`. Sempre que um novo acesso for criado no Firebase Authentication, siga estes passos para liberar o login no painel:
+Este projeto mantém a coleção `users` como fonte única de permissões (cargo e status). Nenhum documento é criado automaticamente. Sempre que um novo login for habilitado, siga os passos abaixo para registrar o perfil no Firestore.
 
-1. **Criar o usuário no Firebase Authentication**
-   - Vá em *Authentication → Users → Add user*.
-   - Informe email e senha provisória.
-   - Copie o `uid` gerado; ele será usado como ID do documento no Firestore.
+## Passo 1 — Criar o usuário no Firebase Authentication
 
-2. **Criar o documento na coleção `users`**
-   - Acesse *Firestore Database → users*.
-   - Crie um documento com **ID exatamente igual ao `uid`** copiado no passo anterior.
-   - Preencha os campos abaixo:
+1. Abra o console Firebase → *Authentication* → *Users* → **Add user**.
+2. Informe e-mail e senha provisória.
+3. Salve o `uid` gerado (será usado como ID do documento).
 
-     | Campo      | Tipo      | Exemplo                 | Observações                          |
-     | ---------- | --------- | ----------------------- | ------------------------------------ |
-     | `uid`      | string    | `uB93…`                 | Mesmo valor do ID do documento       |
-     | `email`    | string    | `nome@exemplo.com`      | Email cadastrado no Authentication   |
-     | `fullName` | string    | `Nome Sobrenome`        | Nome completo exibido no painel      |
-     | `role`     | string    | `admin` ou deixar vazio | Use `admin` somente para administradores |
-     | `isActive` | boolean   | `true`                  | Defina `false` para bloquear o login |
-     | `createdAt`| timestamp | `Server Timestamp`      | Opcional, mas recomendado            |
-     | `updatedAt`| timestamp | `Server Timestamp`      | Opcional, mas recomendado            |
+## Passo 2 — Criar o documento em `users`
 
-3. **Compartilhar as credenciais**
-   - Para usuários comuns, mantenha `role` em branco (ou `null`) e `isActive` como `true`.
-   - Para administradores, defina `role` como `admin`. Apenas contas com esse valor verão as telas de gestão de usuários.
+1. Vá ao console → *Firestore Database* → coleção `users`.
+2. Crie um documento com **ID exatamente igual ao `uid`** copiado.
+3. Preencha os campos conforme a tabela:
 
-> ⚠️ Caso o documento não exista, o login será bloqueado com a mensagem “Conta sem perfil configurado. Entre em contato com um administrador”.
+| Campo      | Tipo      | Exemplo             | Obrigatório | Observações                                              |
+| ---------- | --------- | ------------------- | ----------- | -------------------------------------------------------- |
+| `uid`      | string    | `uB93…`             | Sim         | Mesmo valor do ID do documento                           |
+| `email`    | string    | `nome@exemplo.com`  | Sim         | Sempre igual ao e-mail criado no Authentication          |
+| `fullName` | string    | `Nome Sobrenome`    | Sim         | Nome completo exibido no dashboard                       |
+| `role`     | string    | `admin`             | Opcional    | Use `admin` para dar acesso ao painel de gestão          |
+| `isActive` | boolean   | `true`              | Opcional    | Defina `false` para bloquear login dessa conta           |
+| `createdAt`| timestamp | Server Timestamp    | Opcional    | Use “Valor do servidor” para registrar a data de criação |
+| `updatedAt`| timestamp | Server Timestamp    | Opcional    | Mesmo que acima                                          |
 
-## Atualização ou remoção de usuários
+> Dica: para criar rapidamente, adicione todos os campos, selecione “**Server Timestamp**” em `createdAt` e `updatedAt` e salve.
 
-- **Alterar cargo ou ativar/desativar**: use o painel de “Gerenciar Usuários” dentro do dashboard (somente administradores visualizam essa opção).
-- **Excluir conta por completo**: além de remover o documento em `users`, exclua o usuário correspondente no Firebase Authentication para revogar o acesso totalmente.
+## Passo 3 — Entregar credenciais
 
-Mantendo esse fluxo manual garantimos que apenas administradores conseguem promover contas ou reativar acessos, sem expor endpoints adicionais.
+- Usuários comuns: mantenha `role` em branco (ou remova o campo) e `isActive` como `true`.
+- Administradores: defina `role` como `admin`. Apenas contas com esse campo terão acesso às telas de gerenciamento.
+
+Se o documento **não** existir ou `isActive` for `false`, o login será bloqueado com a mensagem “Conta sem perfil configurado / desativada”.
+
+## Atualizações posteriores
+
+- **Promover / desativar**: use o modal de “Gerenciar usuários” dentro do dashboard — as alterações são aplicadas em tempo real.
+- **Excluir acesso**: remova o documento de `users` e, em seguida, apague o usuário correspondente em Authentication.
+
+Com esse fluxo manual, apenas administradores conseguem criar ou promover perfis, mantendo a segurança das regras do Firestore.
