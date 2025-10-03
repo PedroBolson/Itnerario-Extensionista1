@@ -6,22 +6,33 @@ service cloud.firestore {
     // RECURSOS PÚBLICOS - Qualquer pessoa pode ver (tópicos, conteúdos, aulas)
     // =============================================================================
     
-    // Tópicos - leitura pública, apenas admins podem modificar
+    // Tópicos - leitura pública, usuários autenticados podem modificar
     match /topics/{topicId} {
       allow read: if true; // Qualquer pessoa pode ver os tópicos
-      allow create, update, delete: if request.auth != null; // Apenas admins autenticados
+      allow create, update, delete: if request.auth != null;
     }
 
-    // Conteúdos - leitura pública, apenas admins podem modificar
+    // Conteúdos - leitura pública, usuários autenticados podem modificar
     match /contents/{contentId} {
       allow read: if true; // Qualquer pessoa pode ver os conteúdos
-      allow create, update, delete: if request.auth != null; // Apenas admins autenticados
+      allow create, update, delete: if request.auth != null;
     }
 
-    // Aulas - leitura pública, apenas admins podem modificar
+    // Aulas - leitura pública, usuários autenticados podem modificar
     match /lessons/{lessonId} {
       allow read: if true; // Qualquer pessoa pode ver as aulas
-      allow create, update, delete: if request.auth != null; // Apenas admins autenticados
+      allow create, update, delete: if request.auth != null;
+    }
+
+    // =============================================================================
+    // USUÁRIOS - Gerenciados apenas por administradores
+    // =============================================================================
+
+    match /users/{userId} {
+      allow read: if isAdmin() || isCurrentUser(userId);
+      allow create: if isAdmin();
+      allow update: if isAdmin();
+      allow delete: if isAdmin();
     }
 
     // =============================================================================
@@ -38,13 +49,21 @@ service cloud.firestore {
       allow delete: if isAdmin();
     }
 
-    match /{document=**} {
-      allow read, write: if false;
-    }
+  }
+
+  match /databases/{database}/documents/{document=**} {
+    allow read, write: if false;
   }
 
   function isAdmin() {
-    return request.auth != null;
+    return request.auth != null
+      && exists(/databases/(default)/documents/users/$(request.auth.uid))
+      && get(/databases/(default)/documents/users/$(request.auth.uid)).data.role == 'admin'
+      && get(/databases/(default)/documents/users/$(request.auth.uid)).data.isActive != false;
+  }
+
+  function isCurrentUser(userId) {
+    return request.auth != null && request.auth.uid == userId;
   }
 
   function isValidParticipantCreate(participantId) {

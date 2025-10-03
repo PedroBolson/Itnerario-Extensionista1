@@ -4,6 +4,7 @@ import { useLocation, useNavigate } from 'react-router-dom';
 import InstantTooltip from './InstantTooltip';
 import { CreateUserModal } from './CreateUserModal';
 import { ChangePasswordModal } from './ChangePasswordModal';
+import { useAuth } from '../hooks/useAuth';
 
 export default function Navigation() {
     const location = useLocation();
@@ -11,6 +12,8 @@ export default function Navigation() {
     const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
     const [showCreateUserModal, setShowCreateUserModal] = useState(false);
     const [showChangePasswordModal, setShowChangePasswordModal] = useState(false);
+    const { profile } = useAuth();
+    const isAdminUser = profile?.role === 'admin';
 
     const HomeIcon = () => (
         <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -52,6 +55,8 @@ export default function Navigation() {
 
 
     const isAdminRoute = location.pathname.startsWith('/dashboard') || location.pathname.startsWith('/admin');
+    const showAdminCreate = isAdminRoute && isAdminUser;
+    const showChangePassword = isAdminRoute;
 
     const navItems = useMemo(() => {
         if (isAdminRoute) {
@@ -137,26 +142,28 @@ export default function Navigation() {
                     })}
 
                     {/* Botões Admin - Apenas para Admin */}
-                    {isAdminRoute && (
+                    {showChangePassword && (
                         <div className="absolute bottom-6 flex flex-col gap-3">
-                            <InstantTooltip tooltip="Criar Admin" position="right">
-                                <motion.button
-                                    onClick={() => setShowCreateUserModal(true)}
-                                    className="w-12 h-12 rounded-xl bg-purple-500/10 text-purple-500 hover:bg-purple-500/20 hover:text-purple-600 transition-colors duration-300 flex items-center justify-center border border-purple-500/20"
-                                    whileHover={{
-                                        scale: 1.05,
-                                        transition: { type: "spring", stiffness: 400, damping: 25 }
-                                    }}
-                                    whileTap={{
-                                        scale: 0.95,
-                                        transition: { type: "spring", stiffness: 400, damping: 25 }
-                                    }}
-                                >
-                                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M18 9v3m0 0v3m0-3h3m-3 0h-3m-2-5a4 4 0 11-8 0 4 4 0 018 0zM3 20a6 6 0 0112 0v1H3v-1z" />
-                                    </svg>
-                                </motion.button>
-                            </InstantTooltip>
+                            {showAdminCreate && (
+                                <InstantTooltip tooltip="Gerenciar Usuários" position="right">
+                                    <motion.button
+                                        onClick={() => setShowCreateUserModal(true)}
+                                        className="w-12 h-12 rounded-xl bg-purple-500/10 text-purple-500 hover:bg-purple-500/20 hover:text-purple-600 transition-colors duration-300 flex items-center justify-center border border-purple-500/20"
+                                        whileHover={{
+                                            scale: 1.05,
+                                            transition: { type: "spring", stiffness: 400, damping: 25 }
+                                        }}
+                                        whileTap={{
+                                            scale: 0.95,
+                                            transition: { type: "spring", stiffness: 400, damping: 25 }
+                                        }}
+                                    >
+                                        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M18 9v3m0 0v3m0-3h3m-3 0h-3m-2-5a4 4 0 11-8 0 4 4 0 018 0zM3 20a6 6 0 0112 0v1H3v-1z" />
+                                        </svg>
+                                    </motion.button>
+                                </InstantTooltip>
+                            )}
 
                             <InstantTooltip tooltip="Trocar Senha" position="right">
                                 <motion.button
@@ -257,29 +264,31 @@ export default function Navigation() {
                             })}
 
                             {/* Botões Admin - Mobile */}
-                            {isAdminRoute && (
-                                <div className="pt-4 mt-4 border-t border-theme space-y-2">
-                                    <button
-                                        onClick={() => {
-                                            setShowCreateUserModal(true);
-                                            setIsMobileMenuOpen(false);
-                                        }}
-                                        className="flex items-center space-x-4 p-4 rounded-xl bg-purple-500/10 text-purple-500 hover:bg-purple-500/20 transition-colors duration-200 w-full"
-                                    >
-                                        <div className="w-10 h-10 rounded-lg bg-purple-500 flex items-center justify-center text-white flex-shrink-0">
-                                            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M18 9v3m0 0v3m0-3h3m-3 0h-3m-2-5a4 4 0 11-8 0 4 4 0 018 0zM3 20a6 6 0 0112 0v1H3v-1z" />
-                                            </svg>
-                                        </div>
-                                        <span className="text-base font-medium flex-1 text-left">
-                                            Criar Admin
-                                        </span>
-                                    </button>
+                    {isAdminRoute && (
+                        <div className="pt-4 mt-4 border-t border-theme space-y-2">
+                            {isAdminUser && (
+                                <button
+                                    onClick={() => {
+                                        setShowCreateUserModal(true);
+                                        setIsMobileMenuOpen(false);
+                                    }}
+                                    className="flex items-center space-x-4 p-4 rounded-xl bg-purple-500/10 text-purple-500 hover:bg-purple-500/20 transition-colors duration-200 w-full"
+                                >
+                                    <div className="w-10 h-10 rounded-lg bg-purple-500 flex items-center justify-center text-white flex-shrink-0">
+                                        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M18 9v3m0 0v3m0-3h3m-3 0h-3m-2-5a4 4 0 11-8 0 4 4 0 018 0zM3 20a6 6 0 0112 0v1H3v-1z" />
+                                        </svg>
+                                    </div>
+                                    <span className="text-base font-medium flex-1 text-left">
+                                        Gerenciar Usuários
+                                    </span>
+                                </button>
+                            )}
 
-                                    <button
-                                        onClick={() => {
-                                            setShowChangePasswordModal(true);
-                                            setIsMobileMenuOpen(false);
+                            <button
+                                onClick={() => {
+                                    setShowChangePasswordModal(true);
+                                    setIsMobileMenuOpen(false);
                                         }}
                                         className="flex items-center space-x-4 p-4 rounded-xl bg-green-500/10 text-green-500 hover:bg-green-500/20 transition-colors duration-200 w-full"
                                     >
@@ -300,19 +309,21 @@ export default function Navigation() {
             )}
 
             {/* Modais Admin */}
-            <CreateUserModal
-                isOpen={showCreateUserModal}
-                onClose={() => setShowCreateUserModal(false)}
-                onUserCreated={() => {
-                    console.log('Usuário criado com sucesso!');
-                }}
-                onError={(error) => {
-                    console.error('Erro ao criar usuário:', error);
-                }}
-                onSuccess={(message) => {
-                    console.log(message);
-                }}
-            />
+            {isAdminUser && (
+                <CreateUserModal
+                    isOpen={showCreateUserModal}
+                    onClose={() => setShowCreateUserModal(false)}
+                    onUserCreated={() => {
+                        console.log('Usuário criado com sucesso!');
+                    }}
+                    onError={(error) => {
+                        console.error('Erro ao criar usuário:', error);
+                    }}
+                    onSuccess={(message) => {
+                        console.log(message);
+                    }}
+                />
+            )}
 
             <ChangePasswordModal
                 isOpen={showChangePasswordModal}
