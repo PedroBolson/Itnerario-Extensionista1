@@ -24,6 +24,7 @@ import {
     createUserRecord,
     listenAllUserRecords,
     updateUserRecord,
+    fetchAllUserRecords,
     type UserRecord
 } from '../lib/users';
 
@@ -165,6 +166,8 @@ export function CreateUserModal({
             const adminEmail = user.email;
             const adminCredential = EmailAuthProvider.credential(adminEmail, adminPassword);
 
+            sessionStorage.setItem('adminRestoreInProgress', '1');
+
             await reauthenticateWithCredential(auth.currentUser, adminCredential);
 
             const credential = await createUserWithEmailAndPassword(auth, email.trim(), password);
@@ -179,6 +182,13 @@ export function CreateUserModal({
                 role: isAdmin ? 'admin' : null,
                 isActive,
             });
+
+            try {
+                const refreshed = await fetchAllUserRecords();
+                setUsers(refreshed);
+            } catch (refreshError) {
+                console.warn('Não foi possível atualizar a lista imediatamente:', refreshError);
+            }
 
             const createdName = fullName || email.trim();
             const message = `${createdName} cadastrado com sucesso${isAdmin ? ' como administrador' : ''}.`;
@@ -217,6 +227,7 @@ export function CreateUserModal({
             setLocalError(errorMessage);
             onError(errorMessage);
         } finally {
+            sessionStorage.removeItem('adminRestoreInProgress');
             setIsCreating(false);
         }
     };

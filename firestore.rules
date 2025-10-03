@@ -30,7 +30,7 @@ service cloud.firestore {
 
     match /users/{userId} {
       allow read: if isAdmin() || isCurrentUser(userId);
-      allow create: if isAdmin();
+      allow create: if isAdmin() || canSelfBootstrap(userId);
       allow update: if isAdmin();
       allow delete: if isAdmin();
     }
@@ -64,6 +64,19 @@ service cloud.firestore {
 
   function isCurrentUser(userId) {
     return request.auth != null && request.auth.uid == userId;
+  }
+
+  function hasAllowedUserKeys(data) {
+    return data.keys().hasOnly(['uid', 'email', 'fullName', 'role', 'isActive', 'createdAt', 'updatedAt']);
+  }
+
+  function canSelfBootstrap(userId) {
+    return isCurrentUser(userId)
+      && !exists(/databases/(default)/documents/users/$(userId))
+      && hasAllowedUserKeys(request.resource.data)
+      && request.resource.data.uid == userId
+      && (!request.resource.data.keys().hasAny(['role']) || request.resource.data.role == null)
+      && (!request.resource.data.keys().hasAny(['isActive']) || request.resource.data.isActive == true);
   }
 
   function isValidParticipantCreate(participantId) {
