@@ -52,11 +52,19 @@ export default function Navigation() {
         </svg>
     );
 
-
+    const PortalIcon = () => (
+        <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 3h4a2 2 0 012 2v4" />
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 21H5a2 2 0 01-2-2V5a2 2 0 012-2h4" />
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 17l5-5-5-5" />
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 12h11" />
+        </svg>
+    );
 
     const isAdminRoute = location.pathname.startsWith('/dashboard') || location.pathname.startsWith('/admin');
     const showAdminCreate = isAdminRoute && isAdminUser;
     const showChangePassword = isAdminRoute;
+    const isPortalActive = location.pathname === '/admin';
 
     const navItems = useMemo(() => {
         if (isAdminRoute) {
@@ -140,6 +148,37 @@ export default function Navigation() {
                             </InstantTooltip>
                         );
                     })}
+
+                    {!isAdminRoute && (
+                        <div className="absolute bottom-6 left-0 right-0 flex justify-center">
+                            <InstantTooltip tooltip="Portal de conteúdos" position="right">
+                                <motion.button
+                                    onClick={() => handleNavigation('/admin')}
+                                    className={`w-12 h-12 rounded-xl border transition-colors duration-300 flex items-center justify-center ${isPortalActive
+                                        ? 'bg-sky-500 text-white border-sky-500 shadow-lg shadow-sky-500/30'
+                                        : 'bg-sky-500/10 text-sky-500 hover:bg-sky-500/20 border-sky-500/20 hover:text-sky-600'
+                                        }`}
+                                    whileHover={{
+                                        scale: 1.08,
+                                        rotate: 2,
+                                        transition: { type: "spring", stiffness: 380, damping: 24 }
+                                    }}
+                                    whileTap={{
+                                        scale: 0.92,
+                                        transition: { type: "spring", stiffness: 380, damping: 24 }
+                                    }}
+                                >
+                                    <motion.div
+                                        animate={isPortalActive ? { rotate: [0, -10, 10, 0], scale: [1, 1.05, 1] } : { rotate: 0, scale: 1 }}
+                                        transition={{ duration: 0.8, ease: "easeInOut" }}
+                                        className="relative z-10"
+                                    >
+                                        <PortalIcon />
+                                    </motion.div>
+                                </motion.button>
+                            </InstantTooltip>
+                        </div>
+                    )}
 
                     {/* Botões Admin - Apenas para Admin */}
                     {showChangePassword && (
@@ -263,32 +302,75 @@ export default function Navigation() {
                                 );
                             })}
 
-                            {/* Botões Admin - Mobile */}
-                    {isAdminRoute && (
-                        <div className="pt-4 mt-4 border-t border-theme space-y-2">
-                            {isAdminUser && (
-                                <button
-                                    onClick={() => {
-                                        setShowCreateUserModal(true);
-                                        setIsMobileMenuOpen(false);
+                            {!isAdminRoute && (
+                                <motion.button
+                                    onClick={() => handleNavigation('/admin')}
+                                    className={`flex items-center space-x-4 p-4 rounded-xl transition-colors duration-200 ${isPortalActive
+                                        ? 'bg-sky-500 text-white'
+                                        : 'text-sky-500 bg-sky-500/10 hover:bg-sky-500/20 hover:text-sky-600'
+                                        }`}
+                                    whileHover={{
+                                        scale: 1.02,
+                                        transition: { type: "spring", stiffness: 320, damping: 27 }
                                     }}
-                                    className="flex items-center space-x-4 p-4 rounded-xl bg-purple-500/10 text-purple-500 hover:bg-purple-500/20 transition-colors duration-200 w-full"
+                                    whileTap={{
+                                        scale: 0.95,
+                                        transition: { type: "spring", stiffness: 320, damping: 27 }
+                                    }}
                                 >
-                                    <div className="w-10 h-10 rounded-lg bg-purple-500 flex items-center justify-center text-white flex-shrink-0">
-                                        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M18 9v3m0 0v3m0-3h3m-3 0h-3m-2-5a4 4 0 11-8 0 4 4 0 018 0zM3 20a6 6 0 0112 0v1H3v-1z" />
-                                        </svg>
+                                    <div className="w-10 h-10 rounded-lg bg-sky-500 flex items-center justify-center text-white flex-shrink-0">
+                                        <PortalIcon />
                                     </div>
-                                    <span className="text-base font-medium flex-1 text-left">
-                                        Gerenciar Usuários
-                                    </span>
-                                </button>
+                                    <div className="flex flex-col items-start flex-1 text-left">
+                                        <span className="text-base font-medium">
+                                            Portal de conteúdos
+                                        </span>
+                                        <motion.span
+                                            className="text-xs text-sky-600/80"
+                                            animate={{ opacity: [0.7, 1, 0.7] }}
+                                            transition={{ duration: 2.2, repeat: Infinity, ease: "easeInOut" }}
+                                        >
+                                            Redirecionar para login
+                                        </motion.span>
+                                    </div>
+                                    <motion.div
+                                        className="text-sky-500"
+                                        animate={{ x: [0, 6, 0] }}
+                                        transition={{ duration: 1.8, repeat: Infinity, ease: "easeInOut" }}
+                                    >
+                                        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                                        </svg>
+                                    </motion.div>
+                                </motion.button>
                             )}
 
-                            <button
-                                onClick={() => {
-                                    setShowChangePasswordModal(true);
-                                    setIsMobileMenuOpen(false);
+                            {/* Botões Admin - Mobile */}
+                            {isAdminRoute && (
+                                <div className="pt-4 mt-4 border-t border-theme space-y-2">
+                                    {isAdminUser && (
+                                        <button
+                                            onClick={() => {
+                                                setShowCreateUserModal(true);
+                                                setIsMobileMenuOpen(false);
+                                            }}
+                                            className="flex items-center space-x-4 p-4 rounded-xl bg-purple-500/10 text-purple-500 hover:bg-purple-500/20 transition-colors duration-200 w-full"
+                                        >
+                                            <div className="w-10 h-10 rounded-lg bg-purple-500 flex items-center justify-center text-white flex-shrink-0">
+                                                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M18 9v3m0 0v3m0-3h3m-3 0h-3m-2-5a4 4 0 11-8 0 4 4 0 018 0zM3 20a6 6 0 0112 0v1H3v-1z" />
+                                                </svg>
+                                            </div>
+                                            <span className="text-base font-medium flex-1 text-left">
+                                                Gerenciar Usuários
+                                            </span>
+                                        </button>
+                                    )}
+
+                                    <button
+                                        onClick={() => {
+                                            setShowChangePasswordModal(true);
+                                            setIsMobileMenuOpen(false);
                                         }}
                                         className="flex items-center space-x-4 p-4 rounded-xl bg-green-500/10 text-green-500 hover:bg-green-500/20 transition-colors duration-200 w-full"
                                     >
