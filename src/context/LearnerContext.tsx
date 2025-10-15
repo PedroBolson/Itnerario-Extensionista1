@@ -35,19 +35,35 @@ export function LearnerProvider({ children }: LearnerProviderProps) {
             return;
         }
 
+        let isMounted = true;
         setIsLoadingProgress(true);
 
+        // ✅ Fetch inicial para dados imediatos (melhor UX)
+        getAllProgressForParticipant(learner.id)
+            .then((initialProgress) => {
+                if (isMounted) {
+                    setProgress(initialProgress);
+                    setIsLoadingProgress(false);
+                }
+            })
+            .catch((error) => {
+                console.error('Error loading initial progress:', error);
+                if (isMounted) {
+                    setIsLoadingProgress(false);
+                }
+            });
+
+        // ✅ Listener para sincronização em tempo real (não mexe no loading)
         const unsubscribe = subscribeToProgress(learner.id, (newProgress) => {
-            setProgress(newProgress);
-            setIsLoadingProgress(false);
+            if (isMounted) {
+                setProgress(newProgress);
+            }
         });
 
-        getAllProgressForParticipant(learner.id)
-            .then(setProgress)
-            .catch(console.error)
-            .finally(() => setIsLoadingProgress(false));
-
-        return unsubscribe;
+        return () => {
+            isMounted = false;
+            unsubscribe();
+        };
     }, [learner]);
 
     const refreshProgress = async () => {

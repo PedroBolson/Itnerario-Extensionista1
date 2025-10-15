@@ -56,25 +56,28 @@ export function useRealtimeData() {
         const unsubscribe = listenLessonsByContent(selectedContentId, (items) => {
             setLessons(items);
             setLastUpdate(new Date());
+
             // Auto-seleciona a primeira lição se não há nenhuma ativa ou se a ativa não existe mais
-            if (items.length > 0 && (!activeLessonId || !items.find(l => l.id === activeLessonId))) {
-                setActiveLessonId(items[0].id);
-            }
+            // ✅ Usando setState funcional para evitar dependência circular
+            setActiveLessonId((currentId) => {
+                if (items.length === 0) return '';
+                // Se não há ID ativo ou o ID ativo não existe mais na lista, seleciona o primeiro
+                if (!currentId || !items.find(l => l.id === currentId)) {
+                    return items[0].id;
+                }
+                // Mantém o ID atual se ainda é válido
+                return currentId;
+            });
         });
 
         return unsubscribe;
-    }, [selectedContentId, activeLessonId]);
+    }, [selectedContentId]);
 
     // Resetar conteúdos e lições quando o tópico muda
     useEffect(() => {
         setSelectedContentId('');
         setActiveLessonId('');
     }, [selectedTopicId]);
-
-    // Resetar lições quando o conteúdo muda  
-    useEffect(() => {
-        setActiveLessonId('');
-    }, [selectedContentId]);
 
     return {
         // Dados
