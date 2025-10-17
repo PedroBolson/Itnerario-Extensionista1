@@ -1,7 +1,6 @@
 import { useState } from 'react';
 import { X, Eye, EyeOff, AlertCircle, Key } from 'lucide-react';
-import { updatePassword, reauthenticateWithCredential, EmailAuthProvider } from 'firebase/auth';
-import { auth } from '../lib/firebase';
+import { useAuth } from '../hooks/useAuth';
 
 interface ChangePasswordModalProps {
     isOpen: boolean;
@@ -26,6 +25,7 @@ export function ChangePasswordModal({
     const [showConfirmPassword, setShowConfirmPassword] = useState(false);
     const [isChanging, setIsChanging] = useState(false);
     const [localError, setLocalError] = useState('');
+    const { changePassword } = useAuth();
 
     const handleClose = () => {
         setCurrentPassword('');
@@ -63,17 +63,7 @@ export function ChangePasswordModal({
         setLocalError('');
 
         try {
-            const user = auth.currentUser;
-            if (!user || !user.email) {
-                throw new Error('Usuário não encontrado');
-            }
-
-            // Reautenticar o usuário com a senha atual
-            const credential = EmailAuthProvider.credential(user.email, currentPassword);
-            await reauthenticateWithCredential(user, credential);
-
-            // Atualizar a senha
-            await updatePassword(user, newPassword);
+            await changePassword(currentPassword, newPassword);
 
             onSuccess('Senha alterada com sucesso!');
             handleClose();
@@ -87,11 +77,11 @@ export function ChangePasswordModal({
                 case 'auth/wrong-password':
                     errorMessage = 'Senha atual incorreta';
                     break;
+                case 'auth/not-authenticated':
+                    errorMessage = 'Sessão expirada. Faça login novamente.';
+                    break;
                 case 'auth/weak-password':
                     errorMessage = 'A nova senha é muito fraca';
-                    break;
-                case 'auth/requires-recent-login':
-                    errorMessage = 'Por segurança, faça login novamente antes de alterar a senha';
                     break;
                 default:
                     errorMessage = err.message || 'Erro ao alterar senha';

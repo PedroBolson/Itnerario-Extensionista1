@@ -1,9 +1,7 @@
 import { useEffect, useState } from 'react';
 import { X, Key, Plus, Copy, CheckCircle2 } from 'lucide-react';
 import { useLearner } from '../context/LearnerContext';
-import { doc, setDoc, getDoc, serverTimestamp } from 'firebase/firestore';
-import { db } from '../lib/firebase';
-import { generateAccessCode } from '../lib/progress';
+import { createParticipant, fetchParticipant, markParticipantActive } from '../lib/progress';
 
 interface LearnerAccessProps {
     isOpen: boolean;
@@ -49,16 +47,7 @@ export function LearnerAccess({ isOpen, onClose }: LearnerAccessProps) {
         setError('');
 
         try {
-            const newCode = generateAccessCode();
-            const learnerData = {
-                code: newCode,
-                displayName: name.trim(),
-                createdAt: serverTimestamp(),
-                lastActiveAt: serverTimestamp()
-            };
-
-            await setDoc(doc(db, 'learningProgress', newCode), learnerData);
-
+            const newCode = await createParticipant(name.trim());
             setLearner({
                 id: newCode,
                 displayName: name.trim(),
@@ -77,8 +66,8 @@ export function LearnerAccess({ isOpen, onClose }: LearnerAccessProps) {
     };
 
     const handleAccessProfile = async () => {
-        if (!code.trim() || code.length !== 4) {
-            setError('Código deve ter 4 caracteres');
+        if (!code.trim() || code.length !== 6) {
+            setError('Código deve ter 6 caracteres');
             return;
         }
 
@@ -86,19 +75,17 @@ export function LearnerAccess({ isOpen, onClose }: LearnerAccessProps) {
         setError('');
 
         try {
-            const docRef = doc(db, 'learningProgress', code.toUpperCase());
-            const docSnap = await getDoc(docRef);
+            const participant = await fetchParticipant(code.toUpperCase());
 
-            if (docSnap.exists()) {
-                const data = docSnap.data();
+            if (participant) {
                 setLearner({
                     id: code.toUpperCase(),
-                    displayName: data.displayName || 'Participante',
-                    createdAt: data.createdAt?.toDate() || new Date(),
+                    displayName: participant.displayName || 'Participante',
+                    createdAt: participant.createdAt,
                     lastActiveAt: new Date()
                 });
 
-                await setDoc(docRef, { lastActiveAt: serverTimestamp() }, { merge: true });
+                markParticipantActive(code.toUpperCase());
                 handleClose();
             } else {
                 setError('Código não encontrado');
@@ -230,9 +217,9 @@ export function LearnerAccess({ isOpen, onClose }: LearnerAccessProps) {
                                 type="text"
                                 value={code}
                                 onChange={(e) => setCode(e.target.value.toUpperCase())}
-                                placeholder="Digite o código (ex: AB3X)"
-                                className="w-full px-3 py-2 border border-theme rounded-lg bg-theme-base focus:ring-2 focus:ring-green-500 focus:border-green-500 text-center text-lg font-mono"
-                                maxLength={4}
+                                placeholder="Digite o código (ex: AB3XY5)"
+                                className="w-full px-3 py-2 border border-theme rounded-lg bg-theme-base focus:ring-2 focus:ring-green-500 focus:border-green-500 text-center text-lg font-mono tracking-wider"
+                                maxLength={6}
                                 autoFocus
                             />
                         </div>
@@ -245,7 +232,7 @@ export function LearnerAccess({ isOpen, onClose }: LearnerAccessProps) {
 
                         <button
                             onClick={handleAccessProfile}
-                            disabled={code.length !== 4 || isLoading}
+                            disabled={code.length !== 6 || isLoading}
                             className="w-full px-4 py-2 bg-green-500 text-white rounded-lg hover:bg-green-600 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
                         >
                             {isLoading ? 'Acessando...' : 'Acessar Rastreio'}
@@ -263,7 +250,7 @@ export function LearnerAccess({ isOpen, onClose }: LearnerAccessProps) {
                             <p className="text-sm text-theme-secondary">Guarde o código abaixo para acompanhar seu progresso.</p>
                         </div>
                         <div className="flex items-center justify-center gap-3">
-                            <div className="px-5 py-3 rounded-xl border border-theme bg-theme-base text-lg font-mono tracking-[0.6em]">
+                            <div className="px-5 py-3 rounded-xl border border-theme bg-theme-base text-xl font-mono tracking-[0.4em]">
                                 {generatedCode.split('').join(' ')}
                             </div>
                             <button

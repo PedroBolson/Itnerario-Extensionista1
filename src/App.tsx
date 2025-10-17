@@ -39,20 +39,16 @@ function AppShell() {
   const location = useLocation();
   const hideNav = location.pathname.startsWith('/admin') && location.pathname === '/admin';
   const isAdminView = location.pathname.startsWith('/dashboard');
-  const { signOutUser } = useAuth();
+  const { signOut, user } = useAuth();
 
   const handleAdminSignOut = async () => {
-    try {
-      await signOutUser();
-    } catch (error) {
-      console.error('Erro ao sair:', error);
-    }
+    void signOut();
   };
 
   return (
     <div className="min-h-[100svh] bg-theme-base transition-colors duration-300">
       {!isAdminView && <ThemeSwitch />}
-      {isAdminView && (
+      {isAdminView && user && (
         <div className="fixed top-4 right-4 md:top-6 md:right-6 z-30 flex items-center gap-2">
           <ThemeSwitch fixed={false} />
           <motion.button

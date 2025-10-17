@@ -97,13 +97,13 @@ type Props = {
 
 export function YouTubePlayer({
   url,
-  title,
+  title: _title,
   className,
   lessonId,
   contentId,
   topicId,
-  contentTitle,
-  topicTitle,
+  contentTitle: _contentTitle,
+  topicTitle: _topicTitle,
   onProgressUpdate,
 }: Props) {
   const { learner } = useLearner();
@@ -131,13 +131,10 @@ export function YouTubePlayer({
       lastPosition: currentTime,
       duration,
       completed,
-      lessonTitle: title,
       contentId,
-      contentTitle,
       topicId,
-      topicTitle,
     });
-  }, [learner, lessonId, title, contentId, contentTitle, topicId, topicTitle]);
+  }, [learner, lessonId, contentId, topicId]);
 
   const updateProgress = useCallback(async (forceSave = false) => {
     if (!playerRef.current || !learner || !lessonId) return;

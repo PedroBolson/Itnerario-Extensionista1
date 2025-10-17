@@ -11,6 +11,8 @@ import { TopicCard } from '../../components/shared/TopicCard';
 import { ContentCard } from '../../components/shared/ContentCard';
 import { LessonCard } from '../../components/shared/LessonCard';
 import { SearchInput } from '../../components/shared/SearchInput';
+import { hydrateFromRemote } from '../../lib/remoteSync';
+import InstantTooltip from '../../components/InstantTooltip';
 
 export function CoursesPage() {
   const { learner, progress, setLearner } = useLearner();
@@ -30,6 +32,19 @@ export function CoursesPage() {
   const [topicQuery, setTopicQuery] = useState('');
   const [contentQuery, setContentQuery] = useState('');
   const [showLearnerAccess, setShowLearnerAccess] = useState(false);
+  const [isRefreshing, setIsRefreshing] = useState(false);
+
+  const handleRefresh = async () => {
+    if (isRefreshing) return;
+    setIsRefreshing(true);
+    try {
+      await hydrateFromRemote();
+    } catch (error) {
+      console.error('Erro ao atualizar dados:', error);
+    } finally {
+      setIsRefreshing(false);
+    }
+  };
 
   const activeLesson = useMemo(() => lessons.find(l => l.id === activeLessonId) || null, [lessons, activeLessonId]);
   const selectedTopicName = useMemo(() => topics.find(t => t.id === selectedTopicId)?.name || '', [topics, selectedTopicId]);
@@ -85,6 +100,34 @@ export function CoursesPage() {
 
           {learner ? (
             <div className="flex items-center gap-3">
+              {/* Botão Atualizar Dados */}
+              <InstantTooltip tooltip="Atualizar conteúdos" position="bottom">
+                <motion.button
+                  onClick={handleRefresh}
+                  disabled={isRefreshing}
+                  className="w-10 h-10 rounded-xl bg-blue-500/10 text-blue-500 hover:bg-blue-500/20 hover:text-blue-600 transition-colors duration-300 flex items-center justify-center border border-blue-500/20 disabled:opacity-50 disabled:cursor-not-allowed"
+                  whileHover={!isRefreshing ? {
+                    scale: 1.05,
+                    transition: { type: "spring", stiffness: 400, damping: 25 }
+                  } : {}}
+                  whileTap={!isRefreshing ? {
+                    scale: 0.95,
+                    transition: { type: "spring", stiffness: 400, damping: 25 }
+                  } : {}}
+                >
+                  <motion.svg
+                    className="w-5 h-5"
+                    fill="none"
+                    stroke="currentColor"
+                    viewBox="0 0 24 24"
+                    animate={isRefreshing ? { rotate: 360 } : { rotate: 0 }}
+                    transition={isRefreshing ? { duration: 1, repeat: Infinity, ease: "linear" } : {}}
+                  >
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                  </motion.svg>
+                </motion.button>
+              </InstantTooltip>
+
               <div className="px-4 py-2 bg-green-100 border border-green-300 text-green-700 rounded-xl flex items-center gap-3">
                 <User size={16} />
                 <div className="leading-tight">
@@ -101,13 +144,43 @@ export function CoursesPage() {
               </button>
             </div>
           ) : (
-            <button
-              onClick={() => setShowLearnerAccess(true)}
-              className="px-4 py-2 bg-blue-500 text-white rounded-xl hover:bg-blue-600 transition-colors flex items-center gap-2"
-            >
-              <User size={16} />
-              Rastreio de progresso
-            </button>
+            <div className="flex items-center gap-3">
+              {/* Botão Atualizar Dados */}
+              <InstantTooltip tooltip="Atualizar conteúdos" position="bottom">
+                <motion.button
+                  onClick={handleRefresh}
+                  disabled={isRefreshing}
+                  className="w-10 h-10 rounded-xl bg-blue-500/10 text-blue-500 hover:bg-blue-500/20 hover:text-blue-600 transition-colors duration-300 flex items-center justify-center border border-blue-500/20 disabled:opacity-50 disabled:cursor-not-allowed"
+                  whileHover={!isRefreshing ? {
+                    scale: 1.05,
+                    transition: { type: "spring", stiffness: 400, damping: 25 }
+                  } : {}}
+                  whileTap={!isRefreshing ? {
+                    scale: 0.95,
+                    transition: { type: "spring", stiffness: 400, damping: 25 }
+                  } : {}}
+                >
+                  <motion.svg
+                    className="w-5 h-5"
+                    fill="none"
+                    stroke="currentColor"
+                    viewBox="0 0 24 24"
+                    animate={isRefreshing ? { rotate: 360 } : { rotate: 0 }}
+                    transition={isRefreshing ? { duration: 1, repeat: Infinity, ease: "linear" } : {}}
+                  >
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                  </motion.svg>
+                </motion.button>
+              </InstantTooltip>
+
+              <button
+                onClick={() => setShowLearnerAccess(true)}
+                className="px-4 py-2 bg-blue-500 text-white rounded-xl hover:bg-blue-600 transition-colors flex items-center gap-2"
+              >
+                <User size={16} />
+                Rastreio de progresso
+              </button>
+            </div>
           )}
         </header>
 

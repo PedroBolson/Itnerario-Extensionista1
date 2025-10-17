@@ -1,169 +1,218 @@
 import {
-  addDoc,
-  updateDoc,
-  deleteDoc,
-  doc,
-  collection,
-  onSnapshot,
-  query,
-  where,
-  orderBy,
-  serverTimestamp,
-  getDocs,
-  writeBatch,
-  Timestamp,
-  type DocumentData,
-  type UpdateData,
-} from 'firebase/firestore';
-import { db } from './firebase';
+  insertContent,
+  insertLesson,
+  insertTopic,
+  listContentsByTopic as listContentsFromStore,
+  listLessonsByContent as listLessonsFromStore,
+  listTopics as listTopicsFromStore,
+  listAllContentsSnapshot,
+  listAllLessonsSnapshot,
+  patchContent,
+  patchLesson,
+  patchTopic,
+  removeContent,
+  removeLesson,
+  removeTopic,
+  reorderContents as reorderContentsInternal,
+  reorderLessons as reorderLessonsInternal,
+  reorderTopics as reorderTopicsInternal,
+  subscribeContents,
+  subscribeLessons,
+  subscribeTopics,
+  getContentById,
+  getLessonById,
+} from './memoryStore';
+import { hydrateFromRemote } from './remoteSync';
+import {
+  isBackendAvailable,
+  remoteCreateRecord,
+  remoteDeleteRecord,
+  remoteUpdateRecord,
+  remoteUpsertRecords,
+} from './remoteStore';
+import type { Content, Lesson, Topic } from './types';
 
-export type Topic = {
-  id: string;
-  name: string;
-  order?: number;
-  coverImageUrl?: string;
-  coverImageAlt?: string;
-  category?: string;
-  color?: string;
-  createdAt?: Timestamp;
-};
+export type { Topic, Content, Lesson } from './types';
 
-export type Content = {
-  id: string;
-  topicId: string;
-  title: string;
-  description?: string;
-  order?: number;
-  coverImageUrl?: string;
-  coverImageAlt?: string;
-  estimatedDuration?: number; // em minutos
-  difficulty?: 'beginner' | 'intermediate' | 'advanced';
-  createdAt?: Timestamp;
-};
+type Listener<T> = (items: T[]) => void;
 
-export type Lesson = {
-  id: string;
-  contentId: string;
-  title: string;
-  youtubeUrl: string;
-  order?: number;
-  createdAt?: Timestamp;
-  description?: string;
-};
-
-// Collection refs
-const topicsCol = collection(db, 'topics');
-const contentsCol = collection(db, 'contents');
-const lessonsCol = collection(db, 'lessons');
-
-// Create
-export async function createTopic(data: Omit<Topic, 'id' | 'createdAt'>) {
-  const payload = {
-    ...data,
-    order: data.order ?? 0,
-    createdAt: serverTimestamp()
-  };
-  return addDoc(topicsCol, payload);
+function nextOrder<T extends { order?: number }>(items: T[]) {
+  if (!items.length) return 0;
+  const max = items.reduce((acc, item) => Math.max(acc, item.order ?? 0), 0);
+  return max + 1;
 }
 
-export async function createContent(data: Omit<Content, 'id' | 'createdAt'>) {
-  const { description, ...rest } = data;
-  const payload: DocumentData = { ...rest, createdAt: serverTimestamp() };
-  if (typeof description === 'string' && description.trim().length > 0) {
-    payload.description = description.trim();
+function ensureId() {
+  if (typeof crypto !== 'undefined' && 'randomUUID' in crypto) {
+    return crypto.randomUUID();
   }
-  return addDoc(contentsCol, payload);
+  const random = Math.random().toString(36).slice(2);
+  const time = Date.now().toString(36);
+  return `${time}-${random}`;
 }
 
-export async function createLesson(data: Omit<Lesson, 'id' | 'createdAt'>) {
-  return addDoc(lessonsCol, { ...data, createdAt: serverTimestamp() });
+export async function createTopic(data: Omit<Topic, 'id' | 'createdAt' | 'updatedAt'>) {
+  const topics = await listAllTopics();
+  const topic = insertTopic({
+    id: ensureId(),
+    name: data.name.trim(),
+    category: data.category,
+    color: data.color,
+    coverImageUrl: data.coverImageUrl?.trim() || undefined,
+    coverImageAlt: data.coverImageAlt?.trim() || undefined,
+    order: data.order ?? nextOrder(topics),
+    createdAt: new Date(),
+    updatedAt: new Date(),
+  });
+  if (isBackendAvailable()) {
+    await remoteCreateRecord('topics', topic);
+    await hydrateFromRemote();
+  }
+  return topic;
 }
 
-// Update
+export async function createContent(data: Omit<Content, 'id' | 'createdAt' | 'updatedAt'>) {
+  const contents = await listContentsByTopic(data.topicId);
+  const content = insertContent({
+    id: ensureId(),
+    topicId: data.topicId,
+    title: data.title.trim(),
+    description: data.description?.trim() || undefined,
+    coverImageUrl: data.coverImageUrl?.trim() || undefined,
+    coverImageAlt: data.coverImageAlt?.trim() || undefined,
+    estimatedDuration: data.estimatedDuration,
+    difficulty: data.difficulty,
+    order: data.order ?? nextOrder(contents),
+    createdAt: new Date(),
+    updatedAt: new Date(),
+  });
+  if (isBackendAvailable()) {
+    await remoteCreateRecord('contents', content);
+    await hydrateFromRemote();
+  }
+  return content;
+}
+
+export async function createLesson(data: Omit<Lesson, 'id' | 'createdAt' | 'updatedAt'>) {
+  const lessons = await listLessonsByContent(data.contentId);
+  const lesson = insertLesson({
+    id: ensureId(),
+    contentId: data.contentId,
+    title: data.title.trim(),
+    youtubeUrl: data.youtubeUrl.trim(),
+    description: data.description?.trim() || undefined,
+    order: data.order ?? nextOrder(lessons),
+    createdAt: new Date(),
+    updatedAt: new Date(),
+  });
+  if (isBackendAvailable()) {
+    await remoteCreateRecord('lessons', lesson);
+    await hydrateFromRemote();
+  }
+  return lesson;
+}
+
 export async function updateTopic(id: string, patch: Partial<Omit<Topic, 'id'>>) {
-  return updateDoc(doc(db, 'topics', id), patch as UpdateData<DocumentData>);
+  patchTopic(id, patch);
+  if (isBackendAvailable()) {
+    await remoteUpdateRecord('topics', id, patch);
+    await hydrateFromRemote();
+  }
 }
 
 export async function updateContent(id: string, patch: Partial<Omit<Content, 'id'>>) {
-  return updateDoc(doc(db, 'contents', id), patch as UpdateData<DocumentData>);
+  patchContent(id, patch);
+  if (isBackendAvailable()) {
+    await remoteUpdateRecord('contents', id, patch);
+    await hydrateFromRemote();
+  }
 }
 
 export async function updateLesson(id: string, patch: Partial<Omit<Lesson, 'id'>>) {
-  return updateDoc(doc(db, 'lessons', id), patch as UpdateData<DocumentData>);
+  patchLesson(id, patch);
+  if (isBackendAvailable()) {
+    await remoteUpdateRecord('lessons', id, patch);
+    await hydrateFromRemote();
+  }
 }
 
-// Delete
 export async function deleteTopic(id: string) {
-  // Note: You may want cascading deletes; for now leave to caller
-  return deleteDoc(doc(db, 'topics', id));
+  removeTopic(id);
+  if (isBackendAvailable()) {
+    await remoteDeleteRecord('topics', id);
+    await hydrateFromRemote();
+  }
 }
 
 export async function deleteContent(id: string) {
-  return deleteDoc(doc(db, 'contents', id));
+  removeContent(id);
+  if (isBackendAvailable()) {
+    await remoteDeleteRecord('contents', id);
+    await hydrateFromRemote();
+  }
 }
 
 export async function deleteLesson(id: string) {
-  return deleteDoc(doc(db, 'lessons', id));
+  removeLesson(id);
+  if (isBackendAvailable()) {
+    await remoteDeleteRecord('lessons', id);
+    await hydrateFromRemote();
+  }
 }
 
-// Reorder helpers (persist `order` based on current index)
 export async function reorderTopics(ids: string[]) {
-  const batch = writeBatch(db);
-  ids.forEach((id, index) => batch.update(doc(db, 'topics', id), { order: index } as UpdateData<DocumentData>));
-  await batch.commit();
+  reorderTopicsInternal(ids);
+  if (isBackendAvailable()) {
+    const records = await listAllTopics();
+    await remoteUpsertRecords('topics', records);
+    await hydrateFromRemote();
+  }
 }
 
 export async function reorderContents(ids: string[]) {
-  const batch = writeBatch(db);
-  ids.forEach((id, index) => batch.update(doc(db, 'contents', id), { order: index } as UpdateData<DocumentData>));
-  await batch.commit();
+  reorderContentsInternal(ids);
+  if (isBackendAvailable()) {
+    const firstId = ids[0];
+    const sample = firstId ? getContentById(firstId) : null;
+    const topicId = sample?.topicId;
+    const records = topicId ? await listContentsByTopic(topicId) : listAllContentsSnapshot();
+    await remoteUpsertRecords('contents', records);
+    await hydrateFromRemote();
+  }
 }
 
 export async function reorderLessons(ids: string[]) {
-  const batch = writeBatch(db);
-  ids.forEach((id, index) => batch.update(doc(db, 'lessons', id), { order: index } as UpdateData<DocumentData>));
-  await batch.commit();
+  reorderLessonsInternal(ids);
+  if (isBackendAvailable()) {
+    const firstId = ids[0];
+    const sample = firstId ? getLessonById(firstId) : null;
+    const contentId = sample?.contentId;
+    const records = contentId ? await listLessonsByContent(contentId) : listAllLessonsSnapshot();
+    await remoteUpsertRecords('lessons', records);
+    await hydrateFromRemote();
+  }
 }
 
-// Queries
-export function listenTopics(cb: (items: Topic[]) => void) {
-  const q = query(topicsCol, orderBy('order', 'asc'), orderBy('createdAt', 'asc'));
-  return onSnapshot(q, (snap) => {
-    const items: Topic[] = snap.docs.map((d) => ({ id: d.id, ...d.data() } as Topic));
-    cb(items);
-  });
+export function listenTopics(cb: Listener<Topic>) {
+  return subscribeTopics(cb);
 }
 
-export function listenContentsByTopic(topicId: string, cb: (items: Content[]) => void) {
-  const q = query(contentsCol, where('topicId', '==', topicId), orderBy('order', 'asc'), orderBy('createdAt', 'asc'));
-  return onSnapshot(q, (snap) => {
-    const items: Content[] = snap.docs.map((d) => ({ id: d.id, ...d.data() } as Content));
-    cb(items);
-  });
+export function listenContentsByTopic(topicId: string, cb: Listener<Content>) {
+  return subscribeContents(topicId, cb);
 }
 
-export function listenLessonsByContent(contentId: string, cb: (items: Lesson[]) => void) {
-  const q = query(lessonsCol, where('contentId', '==', contentId), orderBy('order', 'asc'), orderBy('createdAt', 'asc'));
-  return onSnapshot(q, (snap) => {
-    const items: Lesson[] = snap.docs.map((d) => ({ id: d.id, ...d.data() } as Lesson));
-    cb(items);
-  });
+export function listenLessonsByContent(contentId: string, cb: Listener<Lesson>) {
+  return subscribeLessons(contentId, cb);
 }
 
 export async function listAllTopics(): Promise<Topic[]> {
-  const q = query(topicsCol, orderBy('order', 'asc'), orderBy('createdAt', 'asc'));
-  const snap = await getDocs(q);
-  return snap.docs.map((d) => ({ id: d.id, ...d.data() } as Topic));
+  return listTopicsFromStore();
 }
 
 export async function listContentsByTopic(topicId: string): Promise<Content[]> {
-  const q = query(contentsCol, where('topicId', '==', topicId), orderBy('order', 'asc'), orderBy('createdAt', 'asc'));
-  const snap = await getDocs(q);
-  return snap.docs.map((d) => ({ id: d.id, ...d.data() } as Content));
+  return listContentsFromStore(topicId);
 }
 
 export async function listLessonsByContent(contentId: string): Promise<Lesson[]> {
-  const q = query(lessonsCol, where('contentId', '==', contentId), orderBy('order', 'asc'), orderBy('createdAt', 'asc'));
-  const snap = await getDocs(q);
-  return snap.docs.map((d) => ({ id: d.id, ...d.data() } as Lesson));
+  return listLessonsFromStore(contentId);
 }

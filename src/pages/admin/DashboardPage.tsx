@@ -202,6 +202,10 @@ export function DashboardPage() {
     if (!payload.name) return;
 
     try {
+      // Fecha o modal ANTES para não travar a UI
+      closeForm();
+
+      // Sincroniza em background
       if (formTarget?.entity === 'topic' && formTarget.mode === 'edit') {
         await updateTopic(formTarget.item.id, payload);
       } else {
@@ -210,7 +214,6 @@ export function DashboardPage() {
           order: topics.length,
         } as Omit<Topic, 'id' | 'createdAt'>);
       }
-      closeForm();
     } catch (error) {
       console.error('Erro ao salvar tópico:', error);
     }
@@ -238,6 +241,10 @@ export function DashboardPage() {
     if (!payload.title) return;
 
     try {
+      // Fecha o modal ANTES para não travar a UI
+      closeForm();
+
+      // Sincroniza em background
       if (formTarget?.entity === 'content' && formTarget.mode === 'edit') {
         await updateContent(formTarget.item.id, payload);
       } else {
@@ -246,7 +253,6 @@ export function DashboardPage() {
           order: contents.length,
         } as Omit<Content, 'id' | 'createdAt'>);
       }
-      closeForm();
     } catch (error) {
       console.error('Erro ao salvar curso:', error);
     }
@@ -266,6 +272,10 @@ export function DashboardPage() {
     if (!payload.title || !payload.youtubeUrl) return;
 
     try {
+      // Fecha o modal ANTES para não travar a UI
+      closeForm();
+
+      // Sincroniza em background
       if (formTarget?.entity === 'lesson' && formTarget.mode === 'edit') {
         await updateLesson(formTarget.item.id, payload);
       } else {
@@ -274,7 +284,6 @@ export function DashboardPage() {
           order: lessons.length,
         } as Omit<Lesson, 'id' | 'createdAt'>);
       }
-      closeForm();
     } catch (error) {
       console.error('Erro ao salvar aula:', error);
     }

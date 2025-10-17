@@ -5,6 +5,7 @@ import InstantTooltip from './InstantTooltip';
 import { CreateUserModal } from './CreateUserModal';
 import { ChangePasswordModal } from './ChangePasswordModal';
 import { useAuth } from '../hooks/useAuth';
+import { hydrateFromRemote } from '../lib/remoteSync';
 
 export default function Navigation() {
     const location = useLocation();
@@ -12,8 +13,9 @@ export default function Navigation() {
     const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
     const [showCreateUserModal, setShowCreateUserModal] = useState(false);
     const [showChangePasswordModal, setShowChangePasswordModal] = useState(false);
-    const { profile } = useAuth();
-    const isAdminUser = profile?.role === 'admin';
+    const [isRefreshing, setIsRefreshing] = useState(false);
+    const { user } = useAuth();
+    const isAdminUser = user?.role === 'admin';
 
     const HomeIcon = () => (
         <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -63,8 +65,20 @@ export default function Navigation() {
 
     const isAdminRoute = location.pathname.startsWith('/dashboard') || location.pathname.startsWith('/admin');
     const showAdminCreate = isAdminRoute && isAdminUser;
-    const showChangePassword = isAdminRoute;
+    const showChangePassword = isAdminRoute && !!user;
     const isPortalActive = location.pathname === '/admin';
+
+    const handleRefresh = async () => {
+        if (isRefreshing) return;
+        setIsRefreshing(true);
+        try {
+            await hydrateFromRemote();
+        } catch (error) {
+            console.error('Erro ao atualizar dados:', error);
+        } finally {
+            setIsRefreshing(false);
+        }
+    };
 
     const navItems = useMemo(() => {
         if (isAdminRoute) {
@@ -183,6 +197,34 @@ export default function Navigation() {
                     {/* Botões Admin - Apenas para Admin */}
                     {showChangePassword && (
                         <div className="absolute bottom-6 flex flex-col gap-3">
+                            {/* Botão Atualizar - SEMPRE VISÍVEL PARA ADMIN */}
+                            <InstantTooltip tooltip="Atualizar dados" position="right">
+                                <motion.button
+                                    onClick={handleRefresh}
+                                    disabled={isRefreshing}
+                                    className="w-12 h-12 rounded-xl bg-blue-500/10 text-blue-500 hover:bg-blue-500/20 hover:text-blue-600 transition-colors duration-300 flex items-center justify-center border border-blue-500/20 disabled:opacity-50 disabled:cursor-not-allowed"
+                                    whileHover={!isRefreshing ? {
+                                        scale: 1.05,
+                                        transition: { type: "spring", stiffness: 400, damping: 25 }
+                                    } : {}}
+                                    whileTap={!isRefreshing ? {
+                                        scale: 0.95,
+                                        transition: { type: "spring", stiffness: 400, damping: 25 }
+                                    } : {}}
+                                >
+                                    <motion.svg
+                                        className="w-5 h-5"
+                                        fill="none"
+                                        stroke="currentColor"
+                                        viewBox="0 0 24 24"
+                                        animate={isRefreshing ? { rotate: 360 } : { rotate: 0 }}
+                                        transition={isRefreshing ? { duration: 1, repeat: Infinity, ease: "linear" } : {}}
+                                    >
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                                    </motion.svg>
+                                </motion.button>
+                            </InstantTooltip>
+
                             {showAdminCreate && (
                                 <InstantTooltip tooltip="Gerenciar Usuários" position="right">
                                     <motion.button

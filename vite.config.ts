@@ -11,9 +11,18 @@ export default defineConfig({
       output: {
         manualChunks: {
           vendor: ['react', 'react-dom'],
-          firebase: ['firebase/app', 'firebase/auth', 'firebase/firestore'],
           ui: ['framer-motion', 'lucide-react', '@hello-pangea/dnd'],
         }
+      }
+    }
+  },
+  server: {
+    proxy: {
+      '/api': {
+        target: 'https://script.google.com',
+        changeOrigin: true,
+        followRedirects: true,
+        rewrite: (path) => '/macros/s/AKfycby7tE_xJYIcUvSO4Y7VptFWtv9-g3WQOQ3JEAmDUtiK2zisIV69iPsiz_B7etUtfH_FfQ/exec' + path.replace(/^\/api/, ''),
       }
     }
   }

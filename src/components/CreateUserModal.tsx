@@ -12,19 +12,13 @@ import {
     RefreshCw,
     BadgeCheck
 } from 'lucide-react';
-import {
-    createUserWithEmailAndPassword,
-    signInWithEmailAndPassword,
-    reauthenticateWithCredential,
-    EmailAuthProvider,
-} from 'firebase/auth';
-import { auth } from '../lib/firebase';
 import { useAuth } from '../hooks/useAuth';
 import {
-    createUserRecord,
-    listenAllUserRecords,
-    updateUserRecord,
-    fetchAllUserRecords,
+    createUser,
+    listenAllUsers,
+    updateUser,
+    fetchAllUsers,
+    verifyUserCredentials,
     type UserRecord
 } from '../lib/users';
 
@@ -73,7 +67,7 @@ export function CreateUserModal({
             return;
         }
         setListLoading(true);
-        const unsub = listenAllUserRecords((records) => {
+        const unsub = listenAllUsers((records) => {
             setUsers(records);
             setListLoading(false);
         });
@@ -150,41 +144,36 @@ export function CreateUserModal({
             return;
         }
 
-        if (!user?.email) {
-            setLocalError('Não foi possível identificar o administrador atual. Refaça o login.');
+        if (!user) {
+            setLocalError('Sessão expirada. Faça login novamente.');
             return;
         }
 
-        if (!auth.currentUser) {
-            setLocalError('Sessão expirada. Faça login novamente.');
+        if (user.role !== 'admin') {
+            setLocalError('Apenas administradores podem criar novos usuários.');
             return;
         }
 
         setIsCreating(true);
 
         try {
-            const adminEmail = user.email;
-            const adminCredential = EmailAuthProvider.credential(adminEmail, adminPassword);
+            const verified = await verifyUserCredentials(user.email, adminPassword);
+            if (!verified) {
+                setLocalError('Senha de administrador inválida');
+                onError('Senha de administrador inválida');
+                return;
+            }
 
-            sessionStorage.setItem('adminRestoreInProgress', '1');
-
-            await reauthenticateWithCredential(auth.currentUser, adminCredential);
-
-            const credential = await createUserWithEmailAndPassword(auth, email.trim(), password);
-            const createdUser = credential.user;
-
-            await signInWithEmailAndPassword(auth, adminEmail, adminPassword);
-
-            await createUserRecord({
-                uid: createdUser.uid,
+            await createUser({
                 email: email.trim(),
                 fullName: fullName || email.trim(),
-                role: isAdmin ? 'admin' : null,
+                password,
+                role: isAdmin ? 'admin' : 'user',
                 isActive,
             });
 
             try {
-                const refreshed = await fetchAllUserRecords();
+                const refreshed = await fetchAllUsers();
                 setUsers(refreshed);
             } catch (refreshError) {
                 console.warn('Não foi possível atualizar a lista imediatamente:', refreshError);
@@ -200,34 +189,12 @@ export function CreateUserModal({
             setViewMode('list');
         } catch (err: any) {
             console.error('Erro ao criar usuário:', err);
-            let errorMessage = 'Erro ao criar usuário';
-
-            switch (err.code) {
-                case 'auth/email-already-in-use':
-                    errorMessage = 'Este email já está em uso';
-                    break;
-                case 'auth/invalid-email':
-                    errorMessage = 'Email inválido';
-                    break;
-                case 'auth/weak-password':
-                    errorMessage = 'A senha é muito fraca';
-                    break;
-                case 'auth/invalid-login-credentials':
-                case 'auth/invalid-credential':
-                case 'auth/wrong-password':
-                    errorMessage = 'Senha de administrador inválida';
-                    break;
-                case 'auth/too-many-requests':
-                    errorMessage = 'Muitas tentativas. Tente novamente em instantes';
-                    break;
-                default:
-                    errorMessage = err.message || errorMessage;
-            }
-
+            const errorMessage = typeof err?.message === 'string'
+                ? err.message
+                : 'Erro ao criar usuário';
             setLocalError(errorMessage);
             onError(errorMessage);
         } finally {
-            sessionStorage.removeItem('adminRestoreInProgress');
             setIsCreating(false);
         }
     };
@@ -240,13 +207,13 @@ export function CreateUserModal({
             return;
         }
 
-        const nextRole = record.role === 'admin' ? null : 'admin';
+        const nextRole = record.role === 'admin' ? 'user' : 'admin';
         setUpdatingRoleFor(record.uid);
         setLocalError('');
         setLocalSuccess('');
 
         try {
-            await updateUserRecord(record.uid, { role: nextRole });
+            await updateUser(record.uid, { role: nextRole });
             const msg = nextRole === 'admin'
                 ? `${record.fullName || record.email} agora é administrador.`
                 : `${record.fullName || record.email} removido da administração.`;
@@ -276,7 +243,7 @@ export function CreateUserModal({
         setLocalSuccess('');
 
         try {
-            await updateUserRecord(record.uid, { isActive: nextStatus });
+            await updateUser(record.uid, { isActive: nextStatus });
             const msg = nextStatus
                 ? `${record.fullName || record.email} foi reativado.`
                 : `${record.fullName || record.email} foi desativado e não poderá acessar.`;

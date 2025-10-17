@@ -4,7 +4,7 @@ import { listenTopics, listenContentsByTopic, listenLessonsByContent } from '../
 
 /**
  * Hook personalizado para gerenciar dados em tempo real do sistema de cursos.
- * Mantém sincronização automática com o Firebase usando listeners.
+ * Mantém sincronização automática usando os listeners do armazenamento em memória.
  */
 export function useRealtimeData() {
     const [topics, setTopics] = useState<Topic[]>([]);

@@ -1,41 +1,18 @@
 import {
-  collection,
-  doc,
-  getDoc,
-  getDocs,
-  onSnapshot,
-  serverTimestamp,
-  setDoc,
-  type DocumentData,
-  type Timestamp,
-  type Unsubscribe,
-} from 'firebase/firestore';
-import { db } from './firebase';
+  getLessonProgress as getLessonProgressInternal,
+  listParticipants,
+  recordLessonProgress,
+  resetLessonProgress as resetLessonProgressInternal,
+  subscribeParticipant,
+  subscribeProgress,
+  touchParticipant,
+  upsertParticipant,
+} from './memoryStore';
+import type { LearningProgress, ParticipantRecord } from './types';
+import { hydrateFromRemote } from './remoteSync';
+import { isBackendAvailable, remoteUpsertRecords, remoteFetchParticipant } from './remoteStore';
 
-const PARTICIPANTS_COLLECTION = 'learningProgress';
-
-export type ParticipantRecord = {
-  code: string;
-  displayName?: string;
-  createdAt: Timestamp;
-  lastActiveAt?: Timestamp;
-};
-
-export type LearningProgress = {
-  id: string;
-  participantId: string;
-  lessonId: string;
-  contentId?: string;
-  topicId?: string;
-  topicTitle?: string;
-  lastPosition: number;
-  duration: number;
-  completed: boolean;
-  updatedAt: Date;
-  completedAt?: Date;
-  lessonTitle?: string;
-  contentTitle?: string;
-};
+export type { ParticipantRecord, LearningProgress } from './types';
 
 export type ProgressStats = {
   totalLessons: number;
@@ -50,206 +27,155 @@ type SaveLessonProgressParams = {
   lastPosition: number;
   duration: number;
   completed: boolean;
-  lessonTitle?: string;
   contentId?: string;
-  contentTitle?: string;
   topicId?: string;
-  topicTitle?: string;
 };
 
-function participantDoc(code: string) {
-  return doc(db, PARTICIPANTS_COLLECTION, code.toUpperCase());
-}
-
-function normalizeString(value?: string | null) {
-  if (typeof value !== 'string') return null;
-  const trimmed = value.trim();
-  return trimmed.length > 0 ? trimmed : null;
-}
-
-function mapLessonProgress(participantId: string, lessonId: string, data: DocumentData | undefined): LearningProgress {
-  if (!data) {
-    return {
-      id: lessonId,
-      participantId,
-      lessonId,
-      lastPosition: 0,
-      duration: 0,
-      completed: false,
-      updatedAt: new Date(0),
-    };
-  }
-
-  const updatedAt = (data.updatedAt as Timestamp | undefined)?.toDate() ?? new Date(0);
-  const completedAtRaw = data.completedAt as Timestamp | null | undefined;
-
-  return {
-    id: lessonId,
-    participantId,
-    lessonId,
-    contentId: typeof data.contentId === 'string' && data.contentId.length > 0 ? data.contentId : undefined,
-    topicId: typeof data.topicId === 'string' && data.topicId.length > 0 ? data.topicId : undefined,
-    topicTitle: typeof data.topicTitle === 'string' && data.topicTitle.length > 0 ? data.topicTitle : undefined,
-    lastPosition: typeof data.lastPosition === 'number' ? data.lastPosition : 0,
-    duration: typeof data.duration === 'number' ? data.duration : 0,
-    completed: Boolean(data.completed),
-    updatedAt,
-    completedAt: completedAtRaw ? completedAtRaw.toDate() : undefined,
-    lessonTitle: typeof data.lessonTitle === 'string' && data.lessonTitle.length > 0 ? data.lessonTitle : undefined,
-    contentTitle: typeof data.contentTitle === 'string' && data.contentTitle.length > 0 ? data.contentTitle : undefined,
-  };
-}
-
-export function generateAccessCode(length = 4) {
+export function generateAccessCode(length = 6) {
+  // Alfabeto sem letras ambíguas (I, O) e números ambíguos (0, 1)
   const alphabet = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
   const bytes = new Uint8Array(length);
   crypto.getRandomValues(bytes);
   return Array.from(bytes, (b) => alphabet[b % alphabet.length]).join('');
 }
 
+function serializeParticipantForRemote(participant: ReturnType<typeof listParticipants>[number]) {
+  return {
+    code: participant.code,
+    displayName: participant.displayName ?? '',
+    createdAt: participant.createdAt,
+    lastActiveAt: participant.lastActiveAt ?? participant.createdAt,
+    lessonProgress: JSON.stringify(participant.lessonProgress ?? {}),
+  };
+}
+
+async function syncParticipantsWithRemote() {
+  // IMPORTANTE: Permite sincronizar participantes mesmo sem sessão de admin
+  // (necessário para criação pública de códigos de rastreio)
+  if (!isBackendAvailable()) return;
+  try {
+    const participants = listParticipants().map(serializeParticipantForRemote);
+    if (participants.length === 0) return;
+    await remoteUpsertRecords('participants', participants);
+    await hydrateFromRemote();
+  } catch (error) {
+    console.warn('Falha ao sincronizar participantes com backend:', error);
+  }
+}
+
 export async function createParticipant(displayName?: string) {
   const code = generateAccessCode();
-  const payload: DocumentData = {
+  const now = new Date();
+  upsertParticipant({
     code,
-    displayName: displayName?.trim() || null,
-    createdAt: serverTimestamp(),
-    lastActiveAt: serverTimestamp(),
-  };
-  await setDoc(participantDoc(code), payload);
+    displayName: displayName?.trim() || undefined,
+    createdAt: now,
+    lastActiveAt: now,
+    lessonProgress: {},
+  });
+  await syncParticipantsWithRemote();
   return code;
 }
 
 export async function fetchParticipant(code: string): Promise<ParticipantRecord | null> {
-  const snap = await getDoc(participantDoc(code));
-  if (!snap.exists()) return null;
-  const data = snap.data() as DocumentData;
-  return {
-    code: data.code as string,
-    displayName: (data.displayName as string | null) || undefined,
-    createdAt: data.createdAt as Timestamp,
-    lastActiveAt: data.lastActiveAt as Timestamp | undefined,
-  };
+  // SEMPRE busca direto do servidor
+  const upperCode = code.toUpperCase();
+  
+  try {
+    const data = await remoteFetchParticipant(upperCode);
+    
+    if (!data) return null;
+    
+    // Converte para ParticipantState (com lessonProgress)
+    let lessonProgress: Record<string, LearningProgress> = {};
+    
+    // Parse lessonProgress se existir
+    if (data.lessonProgress) {
+      try {
+        const parsed = typeof data.lessonProgress === 'string' 
+          ? JSON.parse(data.lessonProgress) 
+          : data.lessonProgress;
+        lessonProgress = parsed || {};
+      } catch {
+        lessonProgress = {};
+      }
+    }
+    
+    const participantState = {
+      code: String(data.code || upperCode),
+      displayName: data.displayName ? String(data.displayName) : undefined,
+      createdAt: new Date(String(data.createdAt || Date.now())),
+      lastActiveAt: data.lastActiveAt ? new Date(String(data.lastActiveAt)) : new Date(),
+      lessonProgress,
+    };
+    
+    // Atualiza memoryStore também (para sincronizar)
+    upsertParticipant(participantState);
+    
+    // Retorna apenas o ParticipantRecord (sem lessonProgress)
+    const { lessonProgress: _, ...participant } = participantState;
+    return participant;
+  } catch (error) {
+    console.error('Erro ao buscar participante:', error);
+    return null;
+  }
 }
 
-export function listenParticipant(code: string, cb: (participant: ParticipantRecord | null) => void): Unsubscribe {
-  return onSnapshot(participantDoc(code), (snap) => {
-    if (!snap.exists()) {
-      cb(null);
-      return;
-    }
-    const data = snap.data() as DocumentData;
-    cb({
-      code: data.code as string,
-      displayName: (data.displayName as string | null) || undefined,
-      createdAt: data.createdAt as Timestamp,
-      lastActiveAt: data.lastActiveAt as Timestamp | undefined,
-    });
-  });
+export function listenParticipant(code: string, cb: (participant: ParticipantRecord | null) => void) {
+  return subscribeParticipant(code.toUpperCase(), cb);
 }
 
 export async function saveLessonProgress(params: SaveLessonProgressParams) {
+  const now = new Date();
   const participantId = params.participantId.toUpperCase();
-  const payload: DocumentData = {
+
+  const progress: LearningProgress = {
+    id: params.lessonId,
+    participantId,
+    lessonId: params.lessonId,
+    contentId: params.contentId?.trim() || undefined,
+    topicId: params.topicId?.trim() || undefined,
     lastPosition: Math.max(0, params.lastPosition || 0),
     duration: Math.max(0, params.duration || 0),
     completed: Boolean(params.completed),
-    lessonTitle: normalizeString(params.lessonTitle),
-    contentTitle: normalizeString(params.contentTitle),
-    contentId: normalizeString(params.contentId),
-    topicId: normalizeString(params.topicId),
-    topicTitle: normalizeString(params.topicTitle),
-    updatedAt: serverTimestamp(),
+    updatedAt: now,
+    completedAt: params.completed ? now : undefined,
   };
 
-  if (params.completed) {
-    payload.completedAt = serverTimestamp();
-  } else {
-    payload.completedAt = null;
-  }
-
-  await setDoc(participantDoc(participantId), {
-    lastActiveAt: serverTimestamp(),
-    lessonProgress: {
-      [params.lessonId]: payload,
-    },
-  }, { merge: true });
+  recordLessonProgress(participantId, params.lessonId, progress);
+  touchParticipant(participantId, { lastActiveAt: now });
+  await syncParticipantsWithRemote();
 }
 
 export async function getLessonProgress(participantId: string, lessonId: string): Promise<LearningProgress | null> {
-  const docSnap = await getDoc(participantDoc(participantId));
-  if (!docSnap.exists()) return null;
-  const data = docSnap.data() as DocumentData | undefined;
-  const lessonProgress = data?.lessonProgress as Record<string, DocumentData> | undefined;
-  const entry = lessonProgress?.[lessonId];
-  if (!entry) return null;
-  return mapLessonProgress(participantId.toUpperCase(), lessonId, entry);
+  return getLessonProgressInternal(participantId.toUpperCase(), lessonId);
 }
 
 export async function getAllProgressForParticipant(participantId: string): Promise<LearningProgress[]> {
-  const docSnap = await getDoc(participantDoc(participantId));
-  if (!docSnap.exists()) return [];
-  const data = docSnap.data() as DocumentData | undefined;
-  const lessonProgress = data?.lessonProgress as Record<string, DocumentData> | undefined;
-  if (!lessonProgress) return [];
-  const progress = Object.entries(lessonProgress).map(([lessonId, entry]) =>
-    mapLessonProgress(participantId.toUpperCase(), lessonId, entry),
-  );
+  const participant = listParticipants().find((item) => item.code === participantId.toUpperCase());
+  if (!participant) return [];
+  const progress = Object.values(participant.lessonProgress ?? {}).map((entry) => ({ ...entry }));
   return progress.sort((a, b) => b.updatedAt.getTime() - a.updatedAt.getTime());
 }
 
-export function subscribeToProgress(participantId: string, callback: (progress: LearningProgress[]) => void): Unsubscribe {
-  return onSnapshot(participantDoc(participantId), (snap) => {
-    if (!snap.exists()) {
-      callback([]);
-      return;
-    }
-    const data = snap.data() as DocumentData | undefined;
-    const lessonProgress = data?.lessonProgress as Record<string, DocumentData> | undefined;
-    if (!lessonProgress) {
-      callback([]);
-      return;
-    }
-    const progress = Object.entries(lessonProgress)
-      .map(([lessonId, entry]) => mapLessonProgress(participantId.toUpperCase(), lessonId, entry))
-      .sort((a, b) => b.updatedAt.getTime() - a.updatedAt.getTime());
-    callback(progress);
-  });
+export function subscribeToProgress(participantId: string, callback: (progress: LearningProgress[]) => void) {
+  return subscribeProgress(participantId.toUpperCase(), callback);
 }
 
 export async function getAllParticipants() {
-  const participantsSnapshot = await getDocs(collection(db, PARTICIPANTS_COLLECTION));
-  const results: Array<{
-    id: string;
-    displayName: string;
-    totalLessons: number;
-    completedLessons: number;
-    totalWatchTime: number;
-    lastActive: Date;
-    progress: LearningProgress[];
-  }> = [];
-
-  for (const participantDocSnap of participantsSnapshot.docs) {
-    const participantId = participantDocSnap.id;
-    const participantData = participantDocSnap.data();
-    const lessonProgress = (participantData.lessonProgress as Record<string, DocumentData> | undefined) ?? {};
-    const progress = Object.entries(lessonProgress)
-      .map(([lessonId, entry]) => mapLessonProgress(participantId, lessonId, entry))
-      .sort((a, b) => b.updatedAt.getTime() - a.updatedAt.getTime());
-
-    results.push({
-      id: participantId,
-      displayName: typeof participantData.displayName === 'string' && participantData.displayName.length > 0
-        ? participantData.displayName
-        : participantId,
-      totalLessons: progress.length,
-      completedLessons: progress.filter((p) => p.completed).length,
-      totalWatchTime: progress.reduce((total, p) => total + (p.lastPosition || 0), 0),
-      lastActive: (participantData.lastActiveAt as Timestamp | undefined)?.toDate() ?? new Date(0),
-      progress,
-    });
-  }
-
-  return results;
+  return listParticipants().map((participant) => {
+    const progressList = Object.values(participant.lessonProgress ?? {}).map((entry) => ({ ...entry }));
+    const sorted = progressList.sort((a, b) => b.updatedAt.getTime() - a.updatedAt.getTime());
+    return {
+      id: participant.code,
+      displayName: participant.displayName || participant.code,
+      totalLessons: sorted.length,
+      completedLessons: sorted.filter((p) => p.completed).length,
+      totalWatchTime: sorted.reduce((total, p) => total + (p.lastPosition || 0), 0),
+      lastActive: participant.lastActiveAt ?? participant.createdAt,
+      progress: sorted,
+    };
+  });
 }
 
 export async function getProgressStats(participantId: string): Promise<ProgressStats> {
@@ -274,14 +200,12 @@ export function isLessonCompleted(currentTime: number, duration: number) {
 }
 
 export async function resetLessonCompletion(code: string, lessonId: string) {
-  await setDoc(participantDoc(code), {
-    lastActiveAt: serverTimestamp(),
-    lessonProgress: {
-      [lessonId]: {
-        completed: false,
-        completedAt: null,
-        updatedAt: serverTimestamp(),
-      },
-    },
-  }, { merge: true });
+  resetLessonProgressInternal(code.toUpperCase(), lessonId);
+  await syncParticipantsWithRemote();
+}
+
+export function markParticipantActive(code: string) {
+  const now = new Date();
+  touchParticipant(code.toUpperCase(), { lastActiveAt: now });
+  void syncParticipantsWithRemote();
 }

@@ -1,118 +1,153 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
-import type { User } from 'firebase/auth';
-import { onAuthStateChanged, signInWithEmailAndPassword, signOut } from 'firebase/auth';
-import type { Unsubscribe } from 'firebase/firestore';
-import { auth } from '../lib/firebase';
-import { createUserRecord, fetchUserRecord, listenUserRecord, type UserRecord } from '../lib/users';
+import { useMemo, useState } from 'react';
 import { AuthContext, type AuthContextValue } from './auth';
+import type { UserRecord } from '../lib/users';
+import { changeUserPassword, verifyUserCredentials } from '../lib/users';
+import { remoteLogout } from '../lib/remoteStore';
+
+type ChallengeState = {
+  question: string;
+  answer: number;
+  expiresAt: number;
+};
+
+type AttemptState = {
+  count: number;
+  challenge?: ChallengeState;
+  lastAttempt: number;
+};
+
+type AuthError = Error & {
+  code?: string;
+  challenge?: { question: string };
+};
+
+const ATTEMPT_THRESHOLD = 5;
+const ATTEMPT_WINDOW_MS = 10 * 60 * 1000; // 10 minutes
+const CHALLENGE_TTL_MS = 2 * 60 * 1000; // 2 minutes
+
+const attempts = new Map<string, AttemptState>();
+
+function normalizeUsername(username: string) {
+  return username.trim().toLowerCase();
+}
+
+function createChallenge(): ChallengeState {
+  const a = 10 + Math.floor(Math.random() * 40);
+  const b = 10 + Math.floor(Math.random() * 40);
+  const answer = a + b;
+  return {
+    question: `${a} + ${b}`,
+    answer,
+    expiresAt: Date.now() + CHALLENGE_TTL_MS,
+  };
+}
+
+function getAttemptState(username: string) {
+  const key = normalizeUsername(username);
+  const existing = attempts.get(key);
+  if (!existing) {
+    const state: AttemptState = { count: 0, lastAttempt: Date.now() };
+    attempts.set(key, state);
+    return { state, key };
+  }
+
+  const now = Date.now();
+  if (now - existing.lastAttempt > ATTEMPT_WINDOW_MS) {
+    existing.count = 0;
+    existing.challenge = undefined;
+  }
+  existing.lastAttempt = now;
+
+  if (existing.challenge && existing.challenge.expiresAt < now) {
+    existing.challenge = undefined;
+  }
+
+  attempts.set(key, existing);
+  return { state: existing, key };
+}
+
+function registerFailure(key: string, state: AttemptState) {
+  state.count += 1;
+  if (state.count >= ATTEMPT_THRESHOLD && !state.challenge) {
+    state.challenge = createChallenge();
+  }
+  attempts.set(key, state);
+}
+
+function clearAttempts(key: string) {
+  attempts.delete(key);
+}
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
-  const [user, setUser] = useState<User | null>(null);
-  const [profile, setProfile] = useState<UserRecord | null>(null);
-  const [loading, setLoading] = useState(true);
-  const listenerRef = useRef<Unsubscribe | null>(null);
-  const previousProfileRef = useRef<UserRecord | null>(null);
-
-  useEffect(() => {
-    const unsubscribeAuth = onAuthStateChanged(auth, async (firebaseUser) => {
-      listenerRef.current?.();
-      listenerRef.current = null;
-
-      if (!firebaseUser) {
-        setUser(null);
-        setProfile(null);
-        setLoading(false);
-        return;
-      }
-
-      setUser(firebaseUser);
-      setLoading(true);
-
-      listenerRef.current = listenUserRecord(firebaseUser.uid, (record) => {
-        const suppressGuard = sessionStorage.getItem('adminRestoreInProgress') === '1';
-
-        if (!record) {
-          if (suppressGuard) {
-            setLoading(true);
-            return;
-          }
-
-          setProfile(null);
-          setLoading(false);
-
-          if (previousProfileRef.current) {
-            void signOut(auth).catch((signOutError) => {
-              console.error('Erro ao sair de usuário sem perfil', signOutError);
-            });
-          }
-
-          previousProfileRef.current = null;
-          return;
-        }
-
-        if (suppressGuard) {
-          sessionStorage.removeItem('adminRestoreInProgress');
-        }
-
-        previousProfileRef.current = record;
-        setProfile(record);
-
-        if (record.isActive === false) {
-          setLoading(false);
-          void signOut(auth).catch((signOutError) => {
-            console.error('Erro ao sair de usuário inativo', signOutError);
-          });
-        } else {
-          setLoading(false);
-        }
-      });
-    });
-
-    return () => {
-      unsubscribeAuth();
-      listenerRef.current?.();
-      previousProfileRef.current = null;
-    };
-  }, []);
+  const [user, setUser] = useState<UserRecord | null>(null);
+  const [loading] = useState(false);
 
   const value = useMemo<AuthContextValue>(() => ({
     user,
-    profile,
     loading,
-    async signIn(email: string, password: string) {
-      const credential = await signInWithEmailAndPassword(auth, email, password);
-      let userRecord = await fetchUserRecord(credential.user.uid);
+    async signIn(username: string, password: string, challengeAnswer?: number) {
+      const trimmedUsername = username.trim();
+      const { state, key } = getAttemptState(trimmedUsername);
 
-      if (!userRecord) {
-        try {
-          await createUserRecord({
-            uid: credential.user.uid,
-            email: credential.user.email ?? email,
-            fullName: credential.user.displayName?.trim() || email,
-            role: null,
-            isActive: true,
-          });
-          userRecord = await fetchUserRecord(credential.user.uid);
-        } catch (creationError) {
-          await signOut(auth);
-          const error = new Error('Perfil não encontrado e não foi possível criá-lo automaticamente. Contate um administrador.');
-          (error as Error & { code?: string }).code = 'auth/user-profile-missing';
+      if (state.count >= ATTEMPT_THRESHOLD) {
+        if (!state.challenge) {
+          state.challenge = createChallenge();
+        }
+        if (typeof challengeAnswer !== 'number' || Number.isNaN(challengeAnswer) || challengeAnswer !== state.challenge.answer) {
+          const error = new Error('Responda ao desafio para continuar.') as AuthError;
+          error.code = 'auth/challenge-required';
+          error.challenge = { question: state.challenge.question };
+          attempts.set(key, state);
           throw error;
         }
+        state.challenge = undefined;
+        attempts.set(key, state);
       }
 
-      if (!userRecord || userRecord.isActive === false) {
-        await signOut(auth);
-        const error = new Error(userRecord ? 'Conta desativada. Entre em contato com um administrador.' : 'Conta sem perfil configurado. Entre em contato com um administrador.');
-        (error as Error & { code?: string }).code = userRecord ? 'auth/user-disabled' : 'auth/user-profile-missing';
+      let account: UserRecord | null = null;
+      try {
+        account = await verifyUserCredentials(trimmedUsername, password);
+      } catch (err) {
+        registerFailure(key, state);
+        throw err;
+      }
+
+      if (!account) {
+        registerFailure(key, state);
+        const error = new Error('Credenciais inválidas') as AuthError;
+        error.code = 'auth/invalid-credentials';
+        if (state.challenge) {
+          error.challenge = { question: state.challenge.question };
+        } else if (state.count >= ATTEMPT_THRESHOLD) {
+          state.challenge = createChallenge();
+          attempts.set(key, state);
+          error.challenge = { question: state.challenge.question };
+          error.code = 'auth/challenge-required';
+        }
         throw error;
       }
-      previousProfileRef.current = userRecord;
-    },
-    async signOutUser() {
-      await signOut(auth);
-    },
-  }), [user, profile, loading]);
 
-  return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
+      clearAttempts(key);
+      setUser(account);
+    },
+    async signOut() {
+      await remoteLogout().catch(() => undefined);
+      setUser(null);
+    },
+    async changePassword(currentPassword: string, newPassword: string) {
+      if (!user) {
+        const error = new Error('Usuário não autenticado') as AuthError;
+        error.code = 'auth/not-authenticated';
+        throw error;
+      }
+
+      await changeUserPassword(user.uid, currentPassword, newPassword);
+    },
+  }), [user, loading]);
+
+  return (
+    <AuthContext.Provider value={value}>
+      {children}
+    </AuthContext.Provider>
+  );
 }
