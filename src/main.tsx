@@ -23,8 +23,9 @@ void (async () => {
 
 if ('serviceWorker' in navigator && import.meta.env.PROD) {
   window.addEventListener('load', () => {
+    const swUrl = `${import.meta.env.BASE_URL}sw.js`;
     navigator.serviceWorker
-      .register('/sw.js')
+      .register(swUrl)
       .catch((err) => console.error('Service worker registration failed', err));
   });
 }

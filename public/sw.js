@@ -1,10 +1,10 @@
 const CACHE_NAME = 'itinerario-extensionista-v1';
 const OFFLINE_ASSETS = [
-  '/',
-  '/index.html',
-  '/manifest.webmanifest',
-  '/icons/pwa-192.png',
-  '/icons/pwa-512.png',
+  './',
+  './index.html',
+  './manifest.webmanifest',
+  './icons/pwa-192.png',
+  './icons/pwa-512.png',
 ];
 
 self.addEventListener('install', (event) => {
@@ -34,7 +34,7 @@ self.addEventListener('fetch', (event) => {
   if (request.mode === 'navigate') {
     event.respondWith(
       fetch(request).catch(() =>
-        caches.match('/index.html').then((response) => response || Response.error()),
+        caches.match('./index.html').then((response) => response || Response.error()),
       ),
     );
     return;
