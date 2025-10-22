@@ -236,8 +236,8 @@ export function ParticipantsPage() {
             <p className="text-theme-secondary">Visualize, cadastre e acompanhe os códigos de acesso.</p>
           </div>
 
-          <div className="flex flex-col sm:flex-row gap-4 items-start sm:items-center justify-between">
-            <div className="relative flex-1 max-w-md">
+          <div className="flex flex-col sm:flex-row gap-4 items-start sm:items-center justify-between w-full">
+            <div className="relative w-full sm:flex-1 sm:max-w-md">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-theme-secondary w-4 h-4" />
               <input
                 className="w-full pl-9 pr-3 py-2 rounded-xl border border-theme bg-theme-surface text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
@@ -247,12 +247,12 @@ export function ParticipantsPage() {
               />
             </div>
 
-            <div className="flex items-center gap-3">
-              <div className="relative">
+            <div className="flex flex-wrap sm:flex-nowrap gap-3 w-full sm:w-auto items-stretch sm:items-center justify-start sm:justify-end">
+              <div className="relative w-full sm:w-auto">
                 <select
                   value={sortBy}
                   onChange={(event) => setSortBy(event.target.value as SortOption)}
-                  className="pl-8 pr-3 py-2 rounded-xl border border-theme bg-theme-surface text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 appearance-none"
+                  className="w-full pl-8 pr-3 py-2 rounded-xl border border-theme bg-theme-surface text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 appearance-none"
                 >
                   <option value="activity">Última atividade</option>
                   <option value="name">Nome A-Z</option>
@@ -265,7 +265,7 @@ export function ParticipantsPage() {
 
               <button
                 onClick={() => loadParticipants()}
-                className="px-3 py-2 rounded-xl border border-theme bg-theme-surface text-theme-secondary hover:text-theme-primary hover:bg-theme-surface-hover transition-colors flex items-center gap-2"
+                className="w-full sm:w-auto px-3 py-2 rounded-xl border border-theme bg-theme-surface text-theme-secondary hover:text-theme-primary hover:bg-theme-surface-hover transition-colors flex items-center justify-center gap-2"
               >
                 <RefreshCw size={16} />
                 Atualizar
@@ -273,7 +273,7 @@ export function ParticipantsPage() {
 
               <button
                 onClick={openCreateForm}
-                className="px-3 py-2 rounded-xl bg-blue-500 text-white hover:bg-blue-600 transition-colors flex items-center gap-2"
+                className="w-full sm:w-auto px-3 py-2 rounded-xl bg-blue-500 text-white hover:bg-blue-600 transition-colors flex items-center justify-center gap-2"
               >
                 <Plus size={16} />
                 Novo participante
@@ -283,7 +283,7 @@ export function ParticipantsPage() {
         </header>
 
         <section className="space-y-4">
-          <div className="flex items-center justify-between">
+          <div className="flex flex-wrap items-center justify-between gap-2">
             <h2 className="text-lg font-semibold">Participantes ({filtered.length})</h2>
             <div className="text-sm text-theme-secondary">
               Ordenado por: {sortBy === 'name' ? 'Nome' : 'Atividade'}
@@ -358,17 +358,17 @@ export function ParticipantsPage() {
                           </div>
                         </div>
 
-                        <div className="flex gap-2 items-center justify-end">
+                        <div className="flex flex-col sm:flex-row gap-2 w-full md:w-auto items-stretch sm:items-center justify-start sm:justify-end">
                           <button
                             onClick={() => copyToClipboard(participant.id)}
-                            className="px-3 py-2 rounded-lg border border-theme text-sm flex items-center gap-2 hover:bg-theme-surface-hover transition-colors"
+                            className="w-full sm:w-auto px-3 py-2 rounded-lg border border-theme text-sm flex items-center justify-center gap-2 hover:bg-theme-surface-hover transition-colors"
                           >
                             {copiedCode === participant.id ? <Check size={16} className="text-green-500" /> : <Copy size={16} />}
                             {copiedCode === participant.id ? 'Copiado' : 'Copiar'}
                           </button>
                           <button
                             onClick={() => openEditForm(participant)}
-                            className="px-3 py-2 rounded-lg border border-theme text-sm flex items-center gap-2 hover:bg-theme-surface-hover transition-colors"
+                            className="w-full sm:w-auto px-3 py-2 rounded-lg border border-theme text-sm flex items-center justify-center gap-2 hover:bg-theme-surface-hover transition-colors"
                           >
                             <Pencil size={16} />
                             Editar
@@ -376,7 +376,7 @@ export function ParticipantsPage() {
                           <button
                             onClick={() => handleDelete(participant.id)}
                             disabled={!isAdmin || deletingCode === participant.id}
-                            className="px-3 py-2 rounded-lg border border-theme text-sm flex items-center gap-2 hover:bg-theme-surface-hover transition-colors disabled:opacity-40"
+                            className="w-full sm:w-auto px-3 py-2 rounded-lg border border-theme text-sm flex items-center justify-center gap-2 hover:bg-theme-surface-hover transition-colors disabled:opacity-40"
                           >
                             <Trash2 size={16} />
                             Remover
