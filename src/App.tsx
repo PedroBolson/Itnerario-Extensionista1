@@ -83,8 +83,15 @@ function AppShell() {
   );
 }
 
+function normalizeBasename(value: string) {
+  if (!value) return '/';
+  if (value === '/' || value === './' || value === '.') return '/';
+  const trimmed = value.endsWith('/') ? value.slice(0, -1) : value;
+  return trimmed.startsWith('/') ? trimmed : `/${trimmed}`;
+}
+
 function App() {
-  const basename = new URL(import.meta.env.BASE_URL, window.location.href).pathname;
+  const basename = normalizeBasename(import.meta.env.BASE_URL);
 
   return (
     <Router basename={basename}>
