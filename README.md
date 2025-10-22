@@ -135,6 +135,7 @@
 - Microinterações com Framer Motion em cards, botões do nav, banners de feedback e tooltips (`InstantTooltip`).
 - Layouts responsivos (Tailwind tokens com classes semânticas `bg-theme-*`, `text-theme-*`, etc.).
 - Indicadores de atualização (`RealtimeIndicator`) informam sincronizações em background.
+- Instalável como PWA (manifesto dedicado, ícones e service worker com cache básico).
 
 ## Fluxos críticos e segurança
 
@@ -174,6 +175,13 @@
    npm run build
    npm run preview
    ```
+
+## Deploy automatizado (GitHub Pages)
+
+- Qualquer push na branch `gitpages` dispara o workflow `.github/workflows/deploy.yml`.
+- O pipeline executa `npm ci`, `npm run build` e publica o conteúdo da pasta `dist/` na branch `gh-pages` usando `peaceiris/actions-gh-pages`.
+- Configure o GitHub Pages para servir a partir da branch `gh-pages` (diretório raiz). Recomenda-se apontar o backend (CORS) para a URL final do Pages.
+- Caso o front dependa de variáveis sensíveis (`VITE_REMOTE_BASE_URL`, `VITE_REMOTE_API_SECRET`), crie **Repository Secrets** ou **Variables** com esses nomes para que o build de produção use os valores corretos.
 
 ## Configuração do backend (Apps Script)
 
