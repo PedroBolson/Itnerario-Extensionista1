@@ -4,6 +4,13 @@ import { getAllProgressForParticipant, subscribeToProgress, type LearningProgres
 export interface Learner {
     id: string;
     displayName: string;
+    firstName?: string;
+    lastName?: string;
+    age?: number | null;
+    gender?: string;
+    fatherName?: string;
+    motherName?: string;
+    careHouse?: string;
     email?: string;
     createdAt: Date;
     lastActiveAt: Date;

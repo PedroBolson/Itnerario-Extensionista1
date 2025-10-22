@@ -7,76 +7,208 @@ const RECAPTCHA_SECRET = () => cfg('RECAPTCHA_SECRET');
 
 const SCHEMA = {
   users: {
-    key: 'uid',
-    headers: ['uid','email','fullName','role','isActive','passwordHash','createdAt','updatedAt'],
+    key: 'id',
+    headers: ['id','email','nomeCompleto','perfil','ativo','hashSenha','criadoEm','atualizadoEm'],
     validators: {
-      uid: s => str(s, 128),
+      id: s => str(s, 128),
       email: s => str((s||'').toLowerCase(), 256),
-      fullName: s => str(s, 256),
-      role: s => (String(s) === 'admin' ? 'admin' : 'user'), // só admin/user
-      isActive: v => bool(v),
-      passwordHash: s => str(s, 512),
-      createdAt: d => dateOrNow(d),
-      updatedAt: d => dateOrNow(d),
+      nomeCompleto: s => str(s, 256),
+      perfil: s => (String(s) === 'admin' ? 'admin' : 'user'),
+      ativo: v => bool(v),
+      hashSenha: s => str(s, 512),
+      criadoEm: d => dateOrNow(d),
+      atualizadoEm: d => dateOrNow(d),
     }
   },
   topics: {
     key: 'id',
-    headers: ['id','name','category','color','order','coverImageUrl','coverImageAlt','createdAt','updatedAt'],
+    headers: ['id','nome','categoria','cor','ordem','imagemCapaUrl','imagemCapaAlt','criadoEm','atualizadoEm'],
     validators: {
       id: s => str(s, 128),
-      name: s => str(s, 128),
-      category: s => str(s, 64),
-      color: s => str(s, 32),
-      order: n => int(n),
-      coverImageUrl: s => str(s, 512),
-      coverImageAlt: s => str(s, 256),
-      createdAt: d => dateOrNow(d),
-      updatedAt: d => dateOrNow(d),
+      nome: s => str(s, 128),
+      categoria: s => str(s, 64),
+      cor: s => str(s, 32),
+      ordem: n => int(n),
+      imagemCapaUrl: s => str(s, 512),
+      imagemCapaAlt: s => str(s, 256),
+      criadoEm: d => dateOrNow(d),
+      atualizadoEm: d => dateOrNow(d),
     }
   },
   contents: {
     key: 'id',
-    headers: ['id','topicId','title','description','order','coverImageUrl','coverImageAlt','difficulty','createdAt','updatedAt'],
+    headers: ['id','topicoId','titulo','descricao','ordem','imagemCapaUrl','imagemCapaAlt','dificuldade','criadoEm','atualizadoEm'],
     validators: {
       id: s => str(s, 128),
-      topicId: s => str(s, 128),
-      title: s => str(s, 256),
-      description: s => str(s, 4000),
-      order: n => int(n),
-      coverImageUrl: s => str(s, 512),
-      coverImageAlt: s => str(s, 256),
-      difficulty: s => str(s, 32),
-      createdAt: d => dateOrNow(d),
-      updatedAt: d => dateOrNow(d),
+      topicoId: s => str(s, 128),
+      titulo: s => str(s, 256),
+      descricao: s => str(s, 4000),
+      ordem: n => int(n),
+      imagemCapaUrl: s => str(s, 512),
+      imagemCapaAlt: s => str(s, 256),
+      dificuldade: s => str(s, 32),
+      criadoEm: d => dateOrNow(d),
+      atualizadoEm: d => dateOrNow(d),
     }
   },
   lessons: {
     key: 'id',
-    headers: ['id','contentId','title','youtubeUrl','order','description','createdAt','updatedAt'],
+    headers: ['id','conteudoId','titulo','youtubeUrl','ordem','descricao','criadoEm','atualizadoEm'],
     validators: {
       id: s => str(s, 128),
-      contentId: s => str(s, 128),
-      title: s => str(s, 256),
+      conteudoId: s => str(s, 128),
+      titulo: s => str(s, 256),
       youtubeUrl: s => str(s, 512),
-      order: n => int(n),
-      description: s => str(s, 4000),
-      createdAt: d => dateOrNow(d),
-      updatedAt: d => dateOrNow(d),
+      ordem: n => int(n),
+      descricao: s => str(s, 4000),
+      criadoEm: d => dateOrNow(d),
+      atualizadoEm: d => dateOrNow(d),
     }
   },
   participants: {
-    key: 'code',
-    headers: ['code','displayName','createdAt','lastActiveAt','lessonProgress'],
+    key: 'codigo',
+    headers: ['codigo','nome','sobrenome','idade','sexo','nomePai','nomeMae','casaAcolhimento','progressoAulas','criadoEm','ultimaAtividade'],
     validators: {
-      code: s => str(s, 128),
-      displayName: s => str(s, 256),
-      createdAt: d => dateOrNow(d),
-      lastActiveAt: d => dateOrNow(d),
-      lessonProgress: v => jsonText(v, 100000),
+      codigo: s => str(s, 128),
+      nome: s => str(s, 128),
+      sobrenome: s => str(s, 128),
+      idade: n => int(n),
+      sexo: s => str(s, 32),
+      nomePai: s => str(s, 256),
+      nomeMae: s => str(s, 256),
+      casaAcolhimento: s => str(s, 256),
+      progressoAulas: v => jsonText(v, 100000),
+      criadoEm: d => dateOrNow(d),
+      ultimaAtividade: d => dateOrNow(d),
     }
   }
 };
+
+const LEGACY_HEADERS = {
+  users: ['uid','email','fullName','role','isActive','passwordHash','createdAt','updatedAt'],
+  topics: ['id','name','category','color','order','coverImageUrl','coverImageAlt','createdAt','updatedAt'],
+  contents: ['id','topicId','title','description','order','coverImageUrl','coverImageAlt','difficulty','createdAt','updatedAt'],
+  lessons: ['id','contentId','title','youtubeUrl','order','description','createdAt','updatedAt'],
+  participants: ['code','displayName','createdAt','lastActiveAt','lessonProgress'],
+};
+
+const FIELD_MAP = {
+  users: {
+    uid: 'id',
+    email: 'email',
+    fullName: 'nomeCompleto',
+    role: 'perfil',
+    isActive: 'ativo',
+    passwordHash: 'hashSenha',
+    createdAt: 'criadoEm',
+    updatedAt: 'atualizadoEm',
+  },
+  topics: {
+    name: 'nome',
+    category: 'categoria',
+    color: 'cor',
+    order: 'ordem',
+    coverImageUrl: 'imagemCapaUrl',
+    coverImageAlt: 'imagemCapaAlt',
+    createdAt: 'criadoEm',
+    updatedAt: 'atualizadoEm',
+  },
+  contents: {
+    topicId: 'topicoId',
+    title: 'titulo',
+    description: 'descricao',
+    order: 'ordem',
+    coverImageUrl: 'imagemCapaUrl',
+    coverImageAlt: 'imagemCapaAlt',
+    difficulty: 'dificuldade',
+    createdAt: 'criadoEm',
+    updatedAt: 'atualizadoEm',
+  },
+  lessons: {
+    contentId: 'conteudoId',
+    title: 'titulo',
+    youtubeUrl: 'youtubeUrl',
+    order: 'ordem',
+    description: 'descricao',
+    createdAt: 'criadoEm',
+    updatedAt: 'atualizadoEm',
+  },
+  participants: {
+    code: 'codigo',
+    firstName: 'nome',
+    lastName: 'sobrenome',
+    age: 'idade',
+    gender: 'sexo',
+    fatherName: 'nomePai',
+    motherName: 'nomeMae',
+    careHouse: 'casaAcolhimento',
+    lessonProgress: 'progressoAulas',
+    createdAt: 'criadoEm',
+    lastActiveAt: 'ultimaAtividade',
+  }
+};
+
+const FIELD_MAP_REVERSE = Object.keys(FIELD_MAP).reduce((acc, table) => {
+  const entries = FIELD_MAP[table];
+  const rev = {};
+  Object.keys(entries).forEach(clientKey => {
+    rev[entries[clientKey]] = clientKey;
+  });
+  acc[table] = rev;
+  return acc;
+}, {});
+
+function toSheetKey(table, clientKey){
+  const map = FIELD_MAP[table] || {};
+  return map[clientKey] || clientKey;
+}
+
+function toClientKey(table, sheetKey){
+  const map = FIELD_MAP_REVERSE[table] || {};
+  return map[sheetKey] || sheetKey;
+}
+
+function toSheetRecord(table, input){
+  const out = {};
+  Object.keys(input || {}).forEach(key => {
+    const value = input[key];
+    const sheetKey = toSheetKey(table, key);
+    out[sheetKey] = value;
+  });
+  return out;
+}
+
+function headersEqual(a, b){
+  if (!Array.isArray(a) || !Array.isArray(b)) return false;
+  if (a.length !== b.length) return false;
+  for (let i=0;i<a.length;i++){
+    if (String(a[i]) !== String(b[i])) return false;
+  }
+  return true;
+}
+
+function ensureCurrentHeaders(table, sheet, headers){
+  const expected = SCHEMA[table]?.headers;
+  if (!expected) return headers;
+  if (headersEqual(headers, expected)) return headers;
+  const legacy = LEGACY_HEADERS[table];
+  if (legacy && headersEqual(headers, legacy)) {
+    sheet.getRange(1,1,1, expected.length).setValues([expected]);
+    sheet.setFrozenRows(1);
+    sheet.getRange('1:1').setFontWeight('bold').setBackground('#f1f3f4').setWrap(true);
+    return expected;
+  }
+  return headers;
+}
+
+function fromSheetRecord(table, record){
+  const out = {};
+  Object.keys(record || {}).forEach(key => {
+    const clientKey = toClientKey(table, key);
+    out[clientKey] = record[key];
+  });
+  return out;
+}
 
 /***** ================= ENTRYPOINTS / CORS ================= *****/
 
@@ -158,9 +290,11 @@ function doPost(e){
   if (action === 'auth_change_password') return handleAuthChangePassword(body, e);
 
   // Nonce (reforço para escrita)
-  // Exceção: participants com create/batch_upsert não precisa de nonce (criação pública)
   const table = body.table;
-  const needsNonce = requiresNonce(action) && !(table === 'participants' && (action === 'create' || action === 'batch_upsert'));
+  const skipNonce =
+    table === 'participants' &&
+    ['create', 'update', 'upsert', 'batch_upsert'].indexOf(action) >= 0;
+  const needsNonce = requiresNonce(action) && !skipNonce;
   if (needsNonce && !consumeNonce(String(body.nonce||''))) {
     return buildResponse({ ok:false, error:'bad_nonce' }, 403);
   }
@@ -247,8 +381,15 @@ function handleAuthChangePassword(body, e){
   if (!u || !verifyHash(oldp, u.passwordHash)) return buildResponse({ ok:false, error:'invalid_old_password' }, 401);
 
   const { sheet, headers } = getSheetAndHeaders('users');
-  const idx = findRowByKey(sheet, headers, 'uid', actor.uid);
-  writeRow(sheet, headers, idx, { ...u, passwordHash: encodeHash(newp), updatedAt: nowStr() });
+  const idx = findRowByKey(sheet, headers, SCHEMA.users.key, actor.uid);
+  if (idx <= 0) return buildResponse({ ok:false, error:'not_found' }, 404);
+  const updatedRecord = {
+    ...u,
+    passwordHash: encodeHash(newp),
+  };
+  let sheetRecord = toSheetRecord('users', updatedRecord);
+  sheetRecord[toSheetKey('users', 'updatedAt')] = nowStr();
+  writeRow(sheet, headers, idx, sheetRecord);
   return buildResponse({ ok:true }, 200);
 }
 
@@ -284,18 +425,13 @@ function authorizeWrite(e, body){
   const table = body.table;
   const action = body.action;
   
-  // EXCEÇÃO: Participants com create/batch_upsert não precisa de autenticação
-  if (table === 'participants' && (action === 'create' || action === 'batch_upsert')) {
-    return { ok:true, actor: null };
-  }
-  
-  if (!actor) return { ok:false, error:'unauthenticated' };
   if (!SCHEMA[table]) return { ok:false, error:'unknown_table' };
 
   // USERS:
   // - admin: cria/edita/deleta/ upsert
   // - user: só pode update da PRÓPRIA senha
   if (table === 'users') {
+    if (!actor) return { ok:false, error:'unauthenticated' };
     const action = body.action;
     if (action === 'update') {
       const id = body.id;
@@ -321,12 +457,15 @@ function authorizeWrite(e, body){
   // TOPICS / CONTENTS / LESSONS: qualquer usuário logado pode escrever
   if (table === 'topics' || table === 'contents' || table === 'lessons') return { ok:true, actor };
 
-  // PARTICIPANTS: permite criação pública (create/upsert), mas read/update/delete exige autenticação
+  // PARTICIPANTS: qualquer usuário autenticado pode criar/atualizar; somente admins podem excluir
   if (table === 'participants') {
-    // Permite criar novos participantes sem autenticação (para códigos de rastreio públicos)
-    if (action === 'create' || action === 'batch_upsert') return { ok:true, actor: null };
-    // Outras operações exigem autenticação
-    return { ok:true, actor };
+    if (action === 'delete') {
+      if (!actor) return { ok:false, error:'unauthenticated' };
+      if (actor.role !== 'admin') return { ok:false, error:'forbidden_participants_delete_admin_only' };
+      return { ok:true, actor };
+    }
+    // create/update/upsert/batch_upsert podem ser públicos
+    return { ok:true, actor: actor || null };
   }
 
   return { ok:false, error:'rule_not_defined' };
@@ -339,25 +478,40 @@ function handleCreate(body, e){
   if (!auth.ok) return buildResponse(auth, 403);
   const table = body.table;
   const schema = SCHEMA[table];
-  const rec = validateRecord(table, body.record || {});
-  if (!rec[schema.key]) return buildResponse({ ok:false, error:'missing_primary_key' }, 400);
+  const sheetInput = toSheetRecord(table, body.record || {});
+  let validated = validateRecord(table, sheetInput);
+  if (!validated[schema.key]) return buildResponse({ ok:false, error:'missing_primary_key' }, 400);
+
+  let clientRecord = fromSheetRecord(table, validated);
 
   if (table === 'users') {
-    if (rec.password) { rec.passwordHash = encodeHash(String(rec.password)); delete rec.password; }
-    if (!rec.passwordHash) return buildResponse({ ok:false, error:'missing_password_or_hash' }, 400);
-    if (rec.role !== 'admin') rec.role = 'user';
-    if (rec.isActive === undefined) rec.isActive = true;
+    if (clientRecord.password) {
+      clientRecord.passwordHash = encodeHash(String(clientRecord.password));
+      delete clientRecord.password;
+    }
+    if (!clientRecord.passwordHash) return buildResponse({ ok:false, error:'missing_password_or_hash' }, 400);
+    if (clientRecord.role !== 'admin') clientRecord.role = 'user';
+    if (clientRecord.isActive === undefined) clientRecord.isActive = true;
   }
 
+  if (table === 'participants') {
+    if (!clientRecord.createdAt) clientRecord.createdAt = nowStr();
+    if (!clientRecord.lastActiveAt) clientRecord.lastActiveAt = clientRecord.createdAt;
+  }
+
+  validated = toSheetRecord(table, clientRecord);
   const { sheet, headers } = getSheetAndHeaders(table);
-  const idx = findRowByKey(sheet, headers, schema.key, rec[schema.key]);
+  const idx = findRowByKey(sheet, headers, schema.key, validated[schema.key]);
   if (idx > 0) return buildResponse({ ok:false, error:'already_exists' }, 409);
 
-  if (headers.includes('createdAt') && !rec.createdAt) rec.createdAt = nowStr();
-  if (headers.includes('updatedAt')) rec.updatedAt = nowStr();
-  appendRow(sheet, headers, rec);
+  const createdKey = toSheetKey(table, 'createdAt');
+  if (headers.includes(createdKey) && !validated[createdKey]) validated[createdKey] = nowStr();
+  const updatedKey = toSheetKey(table, 'updatedAt');
+  if (headers.includes(updatedKey)) validated[updatedKey] = nowStr();
+  appendRow(sheet, headers, validated);
 
-  return buildResponse({ ok:true, data: table==='users'? sanitizeUser(rec): rec }, 201);
+  const responseRecord = fromSheetRecord(table, validated);
+  return buildResponse({ ok:true, data: table==='users'? sanitizeUser(responseRecord): responseRecord }, 201);
 }
 
 function handleUpsert(body, e){
@@ -365,26 +519,60 @@ function handleUpsert(body, e){
   if (!auth.ok) return buildResponse(auth, 403);
   const table = body.table;
   const schema = SCHEMA[table];
-  const rec = validateRecord(table, body.record || {});
-  if (!rec[schema.key]) return buildResponse({ ok:false, error:'missing_primary_key' }, 400);
+  const sheetInput = toSheetRecord(table, body.record || {});
+  let validated = validateRecord(table, sheetInput);
+  if (!validated[schema.key]) return buildResponse({ ok:false, error:'missing_primary_key' }, 400);
+
+  let clientRecord = fromSheetRecord(table, validated);
 
   if (table === 'users') {
-    if (rec.password) { rec.passwordHash = encodeHash(String(rec.password)); delete rec.password; }
-    if (rec.role !== 'admin') rec.role = 'user';
+    if (clientRecord.password) {
+      clientRecord.passwordHash = encodeHash(String(clientRecord.password));
+      delete clientRecord.password;
+    }
+    if (clientRecord.role !== 'admin') clientRecord.role = 'user';
   }
 
+  if (table === 'participants') {
+    if (!clientRecord.lastActiveAt && clientRecord.createdAt) clientRecord.lastActiveAt = clientRecord.createdAt;
+  }
+
+  validated = toSheetRecord(table, clientRecord);
   const { sheet, headers } = getSheetAndHeaders(table);
-  const idx = findRowByKey(sheet, headers, schema.key, rec[schema.key]);
+  const idx = findRowByKey(sheet, headers, schema.key, validated[schema.key]);
   if (idx > 0) {
-    if (headers.includes('updatedAt')) rec.updatedAt = nowStr();
-    const merged = { ...getRowObject(sheet, headers, idx), ...rec };
-    writeRow(sheet, headers, idx, merged);
-    return buildResponse({ ok:true, upsert:'updated', data: table==='users'? sanitizeUser(merged): merged }, 200);
+    const currentSheet = getRowObject(sheet, headers, idx);
+    const currentClient = fromSheetRecord(table, currentSheet);
+    const mergedClient = { ...currentClient, ...clientRecord };
+
+    if (table === 'users') {
+      if (mergedClient.password) {
+        mergedClient.passwordHash = encodeHash(String(mergedClient.password));
+        delete mergedClient.password;
+      }
+      if (mergedClient.role !== 'admin') mergedClient.role = 'user';
+      if (mergedClient.isActive === undefined) mergedClient.isActive = true;
+    }
+
+    if (table === 'participants') {
+      if (!mergedClient.createdAt) mergedClient.createdAt = currentClient.createdAt || nowStr();
+      if (!mergedClient.lastActiveAt) mergedClient.lastActiveAt = mergedClient.createdAt;
+    }
+
+    let mergedSheet = validateRecord(table, toSheetRecord(table, mergedClient));
+    const updatedKey = toSheetKey(table, 'updatedAt');
+    if (headers.includes(updatedKey)) mergedSheet[updatedKey] = nowStr();
+    writeRow(sheet, headers, idx, mergedSheet);
+    const responseRecord = fromSheetRecord(table, mergedSheet);
+    return buildResponse({ ok:true, upsert:'updated', data: table==='users'? sanitizeUser(responseRecord): responseRecord }, 200);
   } else {
-    if (headers.includes('createdAt') && !rec.createdAt) rec.createdAt = nowStr();
-    if (headers.includes('updatedAt')) rec.updatedAt = nowStr();
-    appendRow(sheet, headers, rec);
-    return buildResponse({ ok:true, upsert:'created', data: table==='users'? sanitizeUser(rec): rec }, 201);
+    const createdKey = toSheetKey(table, 'createdAt');
+    if (headers.includes(createdKey) && !validated[createdKey]) validated[createdKey] = nowStr();
+    const updatedKey = toSheetKey(table, 'updatedAt');
+    if (headers.includes(updatedKey)) validated[updatedKey] = nowStr();
+    appendRow(sheet, headers, validated);
+    const responseRecord = fromSheetRecord(table, validated);
+    return buildResponse({ ok:true, upsert:'created', data: table==='users'? sanitizeUser(responseRecord): responseRecord }, 201);
   }
 }
 
@@ -394,24 +582,45 @@ function handleUpdate(body, e){
   const table = body.table;
   const schema = SCHEMA[table];
   const id = body.id;
-  const patch = validatePatch(table, body.patch || {});
   if (!id) return buildResponse({ ok:false, error:'missing_id' }, 400);
 
-  if (table === 'users' && patch.password) {
-    patch.passwordHash = encodeHash(String(patch.password));
-    delete patch.password;
+  const clientPatchRaw = { ...(body.patch || {}) };
+
+  if (table === 'users' && clientPatchRaw.password) {
+    clientPatchRaw.passwordHash = encodeHash(String(clientPatchRaw.password));
+    delete clientPatchRaw.password;
   }
+
+  const sheetPatchInput = toSheetRecord(table, clientPatchRaw);
+  const validatedPatch = validatePatch(table, sheetPatchInput);
+  const clientPatch = fromSheetRecord(table, validatedPatch);
 
   const { sheet, headers } = getSheetAndHeaders(table);
   const idx = findRowByKey(sheet, headers, schema.key, id);
   if (idx <= 0) return buildResponse({ ok:false, error:'not_found' }, 404);
 
-  const current = getRowObject(sheet, headers, idx);
-  if (headers.includes('updatedAt')) patch.updatedAt = nowStr();
-  const merged = { ...current, ...patch };
-  writeRow(sheet, headers, idx, merged);
+  const currentSheet = getRowObject(sheet, headers, idx);
+  const currentClient = fromSheetRecord(table, currentSheet);
+  const mergedClient = { ...currentClient, ...clientPatch };
 
-  return buildResponse({ ok:true, data: table==='users'? sanitizeUser(merged): merged }, 200);
+  if (table === 'users') {
+    if (mergedClient.role !== 'admin') mergedClient.role = 'user';
+    if (mergedClient.isActive === undefined) mergedClient.isActive = true;
+  }
+
+  if (table === 'participants') {
+    if (mergedClient.lastActiveAt == null && mergedClient.createdAt) {
+      mergedClient.lastActiveAt = mergedClient.createdAt;
+    }
+  }
+
+  let mergedSheet = validateRecord(table, toSheetRecord(table, mergedClient));
+  const updatedKey = toSheetKey(table, 'updatedAt');
+  if (headers.includes(updatedKey)) mergedSheet[updatedKey] = nowStr();
+  writeRow(sheet, headers, idx, mergedSheet);
+
+  const responseRecord = fromSheetRecord(table, mergedSheet);
+  return buildResponse({ ok:true, data: table==='users'? sanitizeUser(responseRecord): responseRecord }, 200);
 }
 
 function handleDelete(body, e){
@@ -426,10 +635,13 @@ function handleDelete(body, e){
   const idx = findRowByKey(sheet, headers, schema.key, id);
   if (idx <= 0) return buildResponse({ ok:false, error:'not_found' }, 404);
 
-  if (table === 'users' && headers.includes('isActive') && !body.hard) {
+  const isActiveKey = toSheetKey(table, 'isActive');
+  const updatedKey = toSheetKey(table, 'updatedAt');
+
+  if (table === 'users' && headers.includes(isActiveKey) && !body.hard) {
     const current = getRowObject(sheet, headers, idx);
-    current.isActive = false;
-    if (headers.includes('updatedAt')) current.updatedAt = nowStr();
+    current[isActiveKey] = false;
+    if (headers.includes(updatedKey)) current[updatedKey] = nowStr();
     writeRow(sheet, headers, idx, current);
     return buildResponse({ ok:true, softDeleted:true }, 200);
   } else {
@@ -450,24 +662,48 @@ function handleBatchUpsert(body, e){
   let created = 0, updated = 0;
 
   records.forEach(r => {
-    const rec = validateRecord(table, r);
+    const clientRecRaw = { ...(r || {}) };
+
+    if (table === 'users' && clientRecRaw.password) {
+      clientRecRaw.passwordHash = encodeHash(String(clientRecRaw.password));
+      delete clientRecRaw.password;
+    }
+
+    if (table === 'participants') {
+      if (!clientRecRaw.createdAt) clientRecRaw.createdAt = nowStr();
+      if (!clientRecRaw.lastActiveAt) clientRecRaw.lastActiveAt = clientRecRaw.createdAt;
+    }
+
+    let rec = validateRecord(table, toSheetRecord(table, clientRecRaw));
     const id = rec[schema.key];
     if (!id) return;
 
-    if (table === 'users' && rec.password) {
-      rec.passwordHash = encodeHash(String(rec.password));
-      delete rec.password;
-    }
-
     const idx = findRowByKey(sheet, headers, schema.key, id);
     if (idx > 0) {
-      if (headers.includes('updatedAt')) rec.updatedAt = nowStr();
-      const current = getRowObject(sheet, headers, idx);
-      writeRow(sheet, headers, idx, { ...current, ...rec });
+      const currentSheet = getRowObject(sheet, headers, idx);
+      const currentClient = fromSheetRecord(table, currentSheet);
+      const mergedClient = { ...currentClient, ...clientRecRaw };
+
+      if (table === 'users') {
+        if (mergedClient.role !== 'admin') mergedClient.role = 'user';
+        if (mergedClient.isActive === undefined) mergedClient.isActive = true;
+      }
+
+      if (table === 'participants') {
+        if (!mergedClient.createdAt) mergedClient.createdAt = currentClient.createdAt || nowStr();
+        if (!mergedClient.lastActiveAt) mergedClient.lastActiveAt = mergedClient.createdAt;
+      }
+
+      let mergedSheet = validateRecord(table, toSheetRecord(table, mergedClient));
+      const updatedKey = toSheetKey(table, 'updatedAt');
+      if (headers.includes(updatedKey)) mergedSheet[updatedKey] = nowStr();
+      writeRow(sheet, headers, idx, mergedSheet);
       updated++;
     } else {
-      if (headers.includes('createdAt') && !rec.createdAt) rec.createdAt = nowStr();
-      if (headers.includes('updatedAt')) rec.updatedAt = nowStr();
+      const createdKey = toSheetKey(table, 'createdAt');
+      if (headers.includes(createdKey) && !rec[createdKey]) rec[createdKey] = nowStr();
+      const updatedKey = toSheetKey(table, 'updatedAt');
+      if (headers.includes(updatedKey)) rec[updatedKey] = nowStr();
       appendRow(sheet, headers, rec);
       created++;
     }
@@ -485,14 +721,18 @@ function readTable(table){
   if (lastRow < 2) return { headers, rows: [] };
   const range = sheet.getRange(2, 1, lastRow-1, headers.length);
   const values = range.getValues();
-  const rows = values.map(row => rowToObj(headers, row)).filter(r => !isRowEmpty(r));
+  const rows = values
+    .map(row => rowToObj(headers, row))
+    .filter(r => !isRowEmpty(r))
+    .map(record => fromSheetRecord(table, record));
   return { headers, rows };
 }
 function getSheetAndHeaders(table){
   const ss = SpreadsheetApp.getActive();
   const sheet = ss.getSheetByName(table);
   if (!sheet) throw new Error('sheet_not_found:'+table);
-  const headers = (sheet.getRange(1,1,1, sheet.getLastColumn()).getValues()[0] || []).map(String);
+  let headers = (sheet.getRange(1,1,1, sheet.getLastColumn()).getValues()[0] || []).map(String);
+  headers = ensureCurrentHeaders(table, sheet, headers);
   return { sheet, headers };
 }
 function rowToObj(headers, row){
@@ -682,18 +922,18 @@ function ensureSchemaNonDestructive(){
 
     // datas
     const dateCols = headers
-      .map((h,i)=> (/(createdAt|updatedAt|lastActiveAt)/.test(h) ? i+1 : null))
+      .map((h,i)=> (/(criadoEm|atualizadoEm|ultimaAtividade)/.test(h) ? i+1 : null))
       .filter(Boolean);
     dateCols.forEach(col => sh.getRange(2, col, Math.max(1, sh.getMaxRows()-1), 1).setNumberFormat("yyyy-MM-dd HH:mm:ss"));
 
     // users: validação de role + checkbox isActive
     if (name === 'users') {
-      const roleCol = headers.indexOf('role') + 1;
+      const roleCol = headers.indexOf('perfil') + 1;
       if (roleCol > 0) {
         const rule = SpreadsheetApp.newDataValidation().requireValueInList(['admin','user'], true).build();
         sh.getRange(2, roleCol, Math.max(1, sh.getMaxRows()-1), 1).setDataValidation(rule);
       }
-      const activeCol = headers.indexOf('isActive') + 1;
+      const activeCol = headers.indexOf('ativo') + 1;
       if (activeCol > 0) {
         const rule = SpreadsheetApp.newDataValidation().requireCheckbox().build();
         sh.getRange(2, activeCol, Math.max(1, sh.getMaxRows()-1), 1).setDataValidation(rule);
@@ -708,5 +948,6 @@ function getById(table, id){
   const { sheet, headers } = getSheetAndHeaders(table);
   const idx = findRowByKey(sheet, headers, SCHEMA[table].key, id);
   if (idx <= 0) return null;
-  return getRowObject(sheet, headers, idx);
+  const record = getRowObject(sheet, headers, idx);
+  return fromSheetRecord(table, record);
 }

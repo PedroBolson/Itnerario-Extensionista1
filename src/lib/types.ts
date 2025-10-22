@@ -50,6 +50,13 @@ export interface Lesson {
 export interface ParticipantRecord {
   code: string;
   displayName?: string;
+  firstName?: string;
+  lastName?: string;
+  age?: number | null;
+  gender?: string;
+  fatherName?: string;
+  motherName?: string;
+  careHouse?: string;
   createdAt: Date;
   lastActiveAt?: Date;
 }
@@ -66,4 +73,3 @@ export interface LearningProgress {
   updatedAt: Date;
   completedAt?: Date;
 }
-

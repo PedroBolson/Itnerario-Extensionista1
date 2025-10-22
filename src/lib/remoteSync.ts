@@ -117,6 +117,13 @@ function normalizeParticipants(rows: Array<Record<string, unknown>> = []) {
     .map((row) => ({
       code: String(row.code ?? ''),
       displayName: row.displayName ? String(row.displayName) : undefined,
+      firstName: row.firstName ? String(row.firstName) : undefined,
+      lastName: row.lastName ? String(row.lastName) : undefined,
+      age: typeof row.age === 'number' ? row.age : row.age ? Number(row.age) : undefined,
+      gender: row.gender ? String(row.gender) : undefined,
+      fatherName: row.fatherName ? String(row.fatherName) : undefined,
+      motherName: row.motherName ? String(row.motherName) : undefined,
+      careHouse: row.careHouse ? String(row.careHouse) : undefined,
       createdAt: toDate(row.createdAt) ?? new Date(),
       lastActiveAt: toDate(row.lastActiveAt),
       lessonProgress: parseLessonProgress(row.lessonProgress),
@@ -231,6 +238,13 @@ async function fetchAndUpdateData() {
       participants: data.participants.map((participant) => ({
         code: participant.code,
         displayName: participant.displayName,
+        firstName: participant.firstName,
+        lastName: participant.lastName,
+        age: participant.age,
+        gender: participant.gender,
+        fatherName: participant.fatherName,
+        motherName: participant.motherName,
+        careHouse: participant.careHouse,
         createdAt: (participant.createdAt ?? new Date()).toISOString(),
         lastActiveAt: participant.lastActiveAt ? participant.lastActiveAt.toISOString() : undefined,
         lessonProgress: Object.fromEntries(

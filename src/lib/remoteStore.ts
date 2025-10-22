@@ -164,7 +164,6 @@ export async function remoteChangePassword(oldPassword: string, newPassword: str
 export async function remoteUpsertRecords(table: string, records: Array<unknown>) {
   if (!isRemoteEnabled()) return;
   if (!records.length) return;
-  // Permite criar participantes sem sessão (para códigos de rastreio públicos)
   const requiresNonce = table === 'participants' ? false : true;
   await postAction(
     {

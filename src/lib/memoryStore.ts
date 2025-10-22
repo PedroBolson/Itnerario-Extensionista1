@@ -39,6 +39,13 @@ export type DataStoreDump = {
   participants: Array<{
     code: string;
     displayName?: string;
+    firstName?: string;
+    lastName?: string;
+    age?: number | string | null;
+    gender?: string;
+    fatherName?: string;
+    motherName?: string;
+    careHouse?: string;
     createdAt: string;
     lastActiveAt?: string;
     lessonProgress: Record<string, {
@@ -118,10 +125,25 @@ function cloneUsers() {
   return store.users.map(({ passwordHash, ...user }) => ({ ...user }));
 }
 
+function resolveDisplayName(participant: ParticipantState) {
+  if (participant.displayName && participant.displayName.trim().length > 0) {
+    return participant.displayName;
+  }
+  const fullName = [participant.firstName, participant.lastName].filter(Boolean).join(' ').trim();
+  return fullName.length > 0 ? fullName : participant.code;
+}
+
 function cloneParticipant(participant: ParticipantState): ParticipantRecord {
   return {
     code: participant.code,
-    displayName: participant.displayName,
+    displayName: resolveDisplayName(participant),
+    firstName: participant.firstName,
+    lastName: participant.lastName,
+    age: participant.age,
+    gender: participant.gender,
+    fatherName: participant.fatherName,
+    motherName: participant.motherName,
+    careHouse: participant.careHouse,
     createdAt: participant.createdAt,
     lastActiveAt: participant.lastActiveAt,
   };
@@ -492,21 +514,52 @@ export function findParticipant(code: string) {
 }
 
 export function upsertParticipant(data: ParticipantState) {
-  const existingIndex = store.participants.findIndex((item) => item.code === data.code);
+  const normalized: ParticipantState = {
+    ...data,
+    firstName: data.firstName?.trim() || undefined,
+    lastName: data.lastName?.trim() || undefined,
+    gender: data.gender?.trim() || undefined,
+    fatherName: data.fatherName?.trim() || undefined,
+    motherName: data.motherName?.trim() || undefined,
+    careHouse: data.careHouse?.trim() || undefined,
+  };
+  normalized.displayName = resolveDisplayName({
+    ...normalized,
+    lessonProgress: normalized.lessonProgress,
+  });
+  const existingIndex = store.participants.findIndex((item) => item.code === normalized.code);
   if (existingIndex >= 0) {
-    store.participants[existingIndex] = { ...data };
+    store.participants[existingIndex] = {
+      ...store.participants[existingIndex],
+      ...normalized,
+    };
   } else {
-    store.participants.push({ ...data });
+    store.participants.push({ ...normalized });
   }
-  emitParticipant(data.code);
-  emitProgress(data.code);
+  emitParticipant(normalized.code);
+  emitProgress(normalized.code);
 }
 
 export function touchParticipant(code: string, patch: Partial<ParticipantState>) {
   const participant = store.participants.find((item) => item.code === code);
   if (!participant) return;
   Object.assign(participant, patch);
+  participant.firstName = participant.firstName?.trim() || undefined;
+  participant.lastName = participant.lastName?.trim() || undefined;
+  participant.gender = participant.gender?.trim() || undefined;
+  participant.fatherName = participant.fatherName?.trim() || undefined;
+  participant.motherName = participant.motherName?.trim() || undefined;
+  participant.careHouse = participant.careHouse?.trim() || undefined;
+  participant.displayName = resolveDisplayName(participant);
   emitParticipant(code);
+}
+
+export function removeParticipant(code: string) {
+  const index = store.participants.findIndex((item) => item.code === code);
+  if (index === -1) return;
+  store.participants.splice(index, 1);
+  emitParticipant(code);
+  emitProgress(code);
 }
 
 export function recordLessonProgress(code: string, lessonId: string, payload: LearningProgress) {
@@ -515,6 +568,13 @@ export function recordLessonProgress(code: string, lessonId: string, payload: Le
     participant = {
       code,
       displayName: code,
+      firstName: undefined,
+      lastName: undefined,
+      age: undefined,
+      gender: undefined,
+      fatherName: undefined,
+      motherName: undefined,
+      careHouse: undefined,
       createdAt: new Date(),
       lastActiveAt: new Date(),
       lessonProgress: {},
@@ -526,6 +586,7 @@ export function recordLessonProgress(code: string, lessonId: string, payload: Le
     [lessonId]: { ...payload },
   };
   participant.lastActiveAt = new Date();
+  participant.displayName = resolveDisplayName(participant);
   emitParticipant(code);
   emitProgress(code);
 }
@@ -583,6 +644,13 @@ export function exportStore(): DataStoreDump {
     participants: store.participants.map((participant) => ({
       code: participant.code,
       displayName: participant.displayName,
+      firstName: participant.firstName,
+      lastName: participant.lastName,
+      age: participant.age ?? undefined,
+      gender: participant.gender,
+      fatherName: participant.fatherName,
+      motherName: participant.motherName,
+      careHouse: participant.careHouse,
       createdAt: participant.createdAt.toISOString(),
       lastActiveAt: participant.lastActiveAt?.toISOString(),
       lessonProgress: Object.fromEntries(
@@ -628,22 +696,45 @@ export function importStore(dump: DataStoreDump) {
     updatedAt: lesson.updatedAt ? new Date(lesson.updatedAt) : undefined,
   }));
 
-  store.participants = dump.participants.map((participant) => ({
-    code: participant.code,
-    displayName: participant.displayName,
-    createdAt: new Date(participant.createdAt),
-    lastActiveAt: participant.lastActiveAt ? new Date(participant.lastActiveAt) : undefined,
-    lessonProgress: Object.fromEntries(
-      Object.entries(participant.lessonProgress ?? {}).map(([lessonId, entry]) => [
-        lessonId,
-        {
-          ...entry,
-          updatedAt: new Date(entry.updatedAt),
-          completedAt: entry.completedAt ? new Date(entry.completedAt) : undefined,
-        },
-      ]),
-    ),
-  }));
+  store.participants = dump.participants.map((participant) => {
+    const age = (() => {
+      if (typeof participant.age === 'number' && Number.isFinite(participant.age)) {
+        return participant.age;
+      }
+      if (typeof participant.age === 'string') {
+        const parsed = Number(participant.age);
+        if (Number.isFinite(parsed)) return parsed;
+      }
+      return undefined;
+    })();
+
+    const base: ParticipantState = {
+      code: participant.code,
+      displayName: participant.displayName,
+      firstName: participant.firstName,
+      lastName: participant.lastName,
+      age,
+      gender: participant.gender,
+      fatherName: participant.fatherName,
+      motherName: participant.motherName,
+      careHouse: participant.careHouse,
+      createdAt: new Date(participant.createdAt),
+      lastActiveAt: participant.lastActiveAt ? new Date(participant.lastActiveAt) : undefined,
+      lessonProgress: Object.fromEntries(
+        Object.entries(participant.lessonProgress ?? {}).map(([lessonId, entry]) => [
+          lessonId,
+          {
+            ...entry,
+            updatedAt: new Date(entry.updatedAt),
+            completedAt: entry.completedAt ? new Date(entry.completedAt) : undefined,
+          },
+        ]),
+      ),
+    };
+
+    base.displayName = resolveDisplayName(base);
+    return base;
+  });
 
   emitTopics();
   store.contents.forEach((content) => emitContents(content.topicId));

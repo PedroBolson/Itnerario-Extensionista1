@@ -1,7 +1,9 @@
 import { useEffect, useState } from 'react';
-import { X, Key, Plus, Copy, CheckCircle2 } from 'lucide-react';
+import type { FormEvent } from 'react';
+import { X, Key } from 'lucide-react';
+
 import { useLearner } from '../context/LearnerContext';
-import { createParticipant, fetchParticipant, markParticipantActive } from '../lib/progress';
+import { fetchParticipant, markParticipantActive, computeParticipantDisplayName } from '../lib/progress';
 
 interface LearnerAccessProps {
     isOpen: boolean;
@@ -10,111 +12,77 @@ interface LearnerAccessProps {
 
 export function LearnerAccess({ isOpen, onClose }: LearnerAccessProps) {
     const { setLearner } = useLearner();
-    const [mode, setMode] = useState<'choose' | 'create' | 'access' | 'created'>('choose');
-    const [name, setName] = useState('');
     const [code, setCode] = useState('');
     const [isLoading, setIsLoading] = useState(false);
     const [error, setError] = useState('');
-    const [generatedCode, setGeneratedCode] = useState('');
-    const [copied, setCopied] = useState(false);
+    const [successMessage, setSuccessMessage] = useState('');
+
+    const resetState = () => {
+        setCode('');
+        setError('');
+        setSuccessMessage('');
+        setIsLoading(false);
+    };
 
     const handleClose = () => {
-        setMode('choose');
-        setName('');
-        setCode('');
-        setGeneratedCode('');
-        setError('');
-        setCopied(false);
+        resetState();
         onClose();
     };
 
     useEffect(() => {
         if (!isOpen) {
-            setMode('choose');
-            setName('');
-            setCode('');
-            setGeneratedCode('');
-            setError('');
-            setCopied(false);
-            setIsLoading(false);
+            resetState();
         }
     }, [isOpen]);
 
-    const handleCreateProfile = async () => {
-        if (!name.trim()) return;
-
-        setIsLoading(true);
-        setError('');
-
-        try {
-            const newCode = await createParticipant(name.trim());
-            setLearner({
-                id: newCode,
-                displayName: name.trim(),
-                createdAt: new Date(),
-                lastActiveAt: new Date()
-            });
-            setGeneratedCode(newCode);
-            setCopied(false);
-            setMode('created');
-        } catch (err) {
-            setError('Erro ao criar perfil. Tente novamente.');
-            console.error(err);
-        } finally {
-            setIsLoading(false);
-        }
-    };
-
-    const handleAccessProfile = async () => {
-        if (!code.trim() || code.length !== 6) {
-            setError('Código deve ter 6 caracteres');
+    const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
+        event.preventDefault();
+        const trimmed = code.trim().toUpperCase();
+        if (trimmed.length === 0) {
+            setError('Informe o código do participante.');
             return;
         }
 
         setIsLoading(true);
         setError('');
+        setSuccessMessage('');
 
         try {
-            const participant = await fetchParticipant(code.toUpperCase());
-
-            if (participant) {
-                setLearner({
-                    id: code.toUpperCase(),
-                    displayName: participant.displayName || 'Participante',
-                    createdAt: participant.createdAt,
-                    lastActiveAt: new Date()
-                });
-
-                markParticipantActive(code.toUpperCase());
-                handleClose();
-            } else {
-                setError('Código não encontrado');
+            const participant = await fetchParticipant(trimmed);
+            if (!participant) {
+                setError('Código não encontrado.');
+                return;
             }
+
+            const displayName = computeParticipantDisplayName({
+                code: trimmed,
+                displayName: participant.displayName,
+                firstName: participant.firstName,
+                lastName: participant.lastName,
+            });
+
+            setLearner({
+                id: trimmed,
+                displayName,
+                firstName: participant.firstName,
+                lastName: participant.lastName,
+                age: participant.age ?? null,
+                gender: participant.gender,
+                fatherName: participant.fatherName,
+                motherName: participant.motherName,
+                careHouse: participant.careHouse,
+                createdAt: participant.createdAt,
+                lastActiveAt: new Date(),
+            });
+
+            await markParticipantActive(trimmed);
+            setSuccessMessage(`Bem-vindo(a), ${displayName}!`);
+            setTimeout(() => handleClose(), 1200);
         } catch (err) {
-            setError('Erro ao acessar perfil. Tente novamente.');
-            console.error(err);
+            console.error('Erro ao buscar participante:', err);
+            setError('Não foi possível validar o código. Tente novamente.');
         } finally {
             setIsLoading(false);
-        }
-    };
-
-    const reset = () => {
-        setMode('choose');
-        setName('');
-        setCode('');
-        setGeneratedCode('');
-        setError('');
-        setCopied(false);
-    };
-
-    const handleCopy = async () => {
-        if (!generatedCode) return;
-        try {
-            await navigator.clipboard.writeText(generatedCode);
-            setCopied(true);
-            setTimeout(() => setCopied(false), 2000);
-        } catch (err) {
-            console.error('Erro ao copiar código', err);
         }
     };
 
@@ -130,146 +98,56 @@ export function LearnerAccess({ isOpen, onClose }: LearnerAccessProps) {
                     </button>
                 </div>
 
-                {mode === 'choose' && (
-                    <div className="space-y-4">
-                        <p className="text-sm text-theme-secondary mb-6">
-                            Para rastrear seu progresso nas aulas, escolha uma das opções abaixo:
+                <form className="space-y-5" onSubmit={handleSubmit}>
+                    <div className="space-y-2">
+                        <p className="text-sm text-theme-secondary">
+                            Informe o código fornecido no atendimento para acompanhar suas aulas.
                         </p>
-
-                        <button
-                            onClick={() => setMode('create')}
-                            className="w-full p-4 border border-theme rounded-xl hover:bg-theme-surface-hover transition-colors flex items-center gap-3"
-                        >
-                            <div className="w-10 h-10 bg-blue-500 rounded-lg flex items-center justify-center text-white">
-                                <Plus size={20} />
-                            </div>
-                            <div className="text-left">
-                                <div className="font-medium">Criar novo perfil</div>
-                                <div className="text-sm text-theme-secondary">Digite seu nome e receba um código</div>
-                            </div>
-                        </button>
-
-                        <button
-                            onClick={() => setMode('access')}
-                            className="w-full p-4 border border-theme rounded-xl hover:bg-theme-surface-hover transition-colors flex items-center gap-3"
-                        >
-                            <div className="w-10 h-10 bg-green-500 rounded-lg flex items-center justify-center text-white">
-                                <Key size={20} />
-                            </div>
-                            <div className="text-left">
-                                <div className="font-medium">Usar código existente</div>
-                                <div className="text-sm text-theme-secondary">Continue acompanhando com seu código</div>
-                            </div>
-                        </button>
-                    </div>
-                )}
-
-                {mode === 'create' && (
-                    <div className="space-y-4">
-                        <button
-                            onClick={reset}
-                            className="text-sm text-theme-secondary hover:text-theme-primary mb-2"
-                        >
-                            ← Voltar
-                        </button>
-
-                        <div>
-                            <label className="block text-sm font-medium mb-2">Seu nome</label>
-                            <input
-                                type="text"
-                                value={name}
-                                onChange={(e) => setName(e.target.value)}
-                                placeholder="Digite seu nome completo"
-                                className="w-full px-3 py-2 border border-theme rounded-lg bg-theme-base focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                                maxLength={50}
-                                autoFocus
-                            />
-                        </div>
-
-                        {error && (
-                            <div className="text-sm text-red-500 bg-red-50 p-2 rounded">
-                                {error}
-                            </div>
-                        )}
-
-                        <button
-                            onClick={handleCreateProfile}
-                            disabled={!name.trim() || isLoading}
-                            className="w-full px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-                        >
-                            {isLoading ? 'Criando...' : 'Criar Perfil e Gerar Código'}
-                        </button>
-                    </div>
-                )}
-
-                {mode === 'access' && (
-                    <div className="space-y-4">
-                        <button
-                            onClick={reset}
-                            className="text-sm text-theme-secondary hover:text-theme-primary mb-2"
-                        >
-                            ← Voltar
-                        </button>
-
-                        <div>
-                            <label className="block text-sm font-medium mb-2">Código de acesso</label>
+                        <div className="relative">
                             <input
                                 type="text"
                                 value={code}
-                                onChange={(e) => setCode(e.target.value.toUpperCase())}
-                                placeholder="Digite o código (ex: AB3XY5)"
-                                className="w-full px-3 py-2 border border-theme rounded-lg bg-theme-base focus:ring-2 focus:ring-green-500 focus:border-green-500 text-center text-lg font-mono tracking-wider"
-                                maxLength={6}
+                                onChange={(event) => setCode(event.target.value.toUpperCase())}
+                                placeholder="Digite seu código"
+                                className="w-full px-3 py-2 pr-10 border border-theme rounded-lg bg-theme-base focus:ring-2 focus:ring-blue-500 focus:border-blue-500 uppercase tracking-widest"
+                                maxLength={12}
                                 autoFocus
+                                disabled={isLoading}
                             />
+                            <Key className="absolute right-3 top-1/2 -translate-y-1/2 text-theme-secondary" size={18} />
                         </div>
-
-                        {error && (
-                            <div className="text-sm text-red-500 bg-red-50 p-2 rounded">
-                                {error}
-                            </div>
-                        )}
-
-                        <button
-                            onClick={handleAccessProfile}
-                            disabled={code.length !== 6 || isLoading}
-                            className="w-full px-4 py-2 bg-green-500 text-white rounded-lg hover:bg-green-600 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-                        >
-                            {isLoading ? 'Acessando...' : 'Acessar Rastreio'}
-                        </button>
                     </div>
-                )}
 
-                {mode === 'created' && (
-                    <div className="space-y-6 text-center">
-                        <div className="mx-auto w-14 h-14 rounded-full bg-green-500/10 border border-green-500/40 text-green-600 grid place-items-center">
-                            <CheckCircle2 size={28} />
+                    {error && (
+                        <div className="text-sm text-red-500 bg-red-50 border border-red-200 p-2 rounded">
+                            {error}
                         </div>
-                        <div className="space-y-1">
-                            <div className="text-lg font-semibold">Perfil criado com sucesso!</div>
-                            <p className="text-sm text-theme-secondary">Guarde o código abaixo para acompanhar seu progresso.</p>
+                    )}
+
+                    {successMessage && (
+                        <div className="text-sm text-green-600 bg-green-50 border border-green-200 p-2 rounded">
+                            {successMessage}
                         </div>
-                        <div className="flex items-center justify-center gap-3">
-                            <div className="px-5 py-3 rounded-xl border border-theme bg-theme-base text-xl font-mono tracking-[0.4em]">
-                                {generatedCode.split('').join(' ')}
-                            </div>
-                            <button
-                                onClick={handleCopy}
-                                className={`px-3 py-2 rounded-xl border transition-colors flex items-center gap-2 ${copied ? 'border-green-500 text-green-600' : 'border-theme text-theme-primary hover:border-theme-primary'}`}
-                            >
-                                <Copy size={16} />
-                                <span className="text-sm font-medium">{copied ? 'Copiado!' : 'Copiar'}</span>
-                            </button>
-                        </div>
-                        <p className="text-xs text-theme-secondary">Se preciso entre em contato com um administrador para recuperar seu código de acompanhamento.</p>
+                    )}
+
+                    <div className="flex gap-3 justify-end">
                         <button
+                            type="button"
                             onClick={handleClose}
-                            className="w-full px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition-colors"
+                            className="px-4 py-2 rounded-lg border border-theme text-theme-secondary hover:text-theme-primary hover:bg-theme-surface-hover transition-colors"
+                            disabled={isLoading}
                         >
-                            Começar a aprender
+                            Cancelar
+                        </button>
+                        <button
+                            type="submit"
+                            disabled={code.trim().length === 0 || isLoading}
+                            className="px-4 py-2 rounded-lg bg-green-500 text-white hover:bg-green-600 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                        >
+                            {isLoading ? 'Verificando...' : 'Acessar'}
                         </button>
                     </div>
-                )}
+                </form>
             </div>
         </div>
     );

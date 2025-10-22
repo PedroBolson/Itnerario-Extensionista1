@@ -7,10 +7,11 @@ import {
   subscribeProgress,
   touchParticipant,
   upsertParticipant,
+  removeParticipant,
 } from './memoryStore';
 import type { LearningProgress, ParticipantRecord } from './types';
 import { hydrateFromRemote } from './remoteSync';
-import { isBackendAvailable, remoteUpsertRecords, remoteFetchParticipant } from './remoteStore';
+import { isBackendAvailable, remoteUpsertRecords, remoteFetchParticipant, remoteDeleteRecord } from './remoteStore';
 import {
   loadSnapshot as loadCachedSnapshot,
   saveLesson as saveCachedLesson,
@@ -38,16 +39,35 @@ type SaveLessonProgressParams = {
   topicId?: string;
 };
 
+export type ParticipantProfileInput = {
+  firstName: string;
+  lastName?: string;
+  age?: number | null;
+  gender?: string;
+  fatherName?: string;
+  motherName?: string;
+  careHouse?: string;
+};
+
+export type ParticipantProfilePatch = Partial<ParticipantProfileInput>;
+
 const SYNC_DEBOUNCE_MS = 1500;
 
 let syncTimer: ReturnType<typeof setTimeout> | null = null;
 let syncInFlight = false;
 let syncQueued = false;
+const dirtyParticipants = new Set<string>();
 
 function serializeParticipantForRemote(participant: ReturnType<typeof listParticipants>[number]) {
   return {
     code: participant.code,
-    displayName: participant.displayName ?? '',
+    firstName: participant.firstName ?? '',
+    lastName: participant.lastName ?? '',
+    age: typeof participant.age === 'number' && Number.isFinite(participant.age) ? participant.age : undefined,
+    gender: participant.gender ?? '',
+    fatherName: participant.fatherName ?? '',
+    motherName: participant.motherName ?? '',
+    careHouse: participant.careHouse ?? '',
     createdAt: participant.createdAt,
     lastActiveAt: participant.lastActiveAt ?? participant.createdAt,
     lessonProgress: JSON.stringify(participant.lessonProgress ?? {}),
@@ -56,6 +76,7 @@ function serializeParticipantForRemote(participant: ReturnType<typeof listPartic
 
 function scheduleParticipantSync(immediate = false) {
   if (!isBackendAvailable()) return;
+  if (dirtyParticipants.size === 0) return;
   if (immediate) {
     if (syncTimer) {
       clearTimeout(syncTimer);
@@ -73,25 +94,40 @@ function scheduleParticipantSync(immediate = false) {
 
 async function performParticipantSync() {
   if (!isBackendAvailable()) return;
+  if (dirtyParticipants.size === 0) return;
   if (syncInFlight) {
     syncQueued = true;
     return;
   }
   syncInFlight = true;
   try {
-    const payload = listParticipants().map(serializeParticipantForRemote);
-    if (payload.length === 0) return;
-    await remoteUpsertRecords('participants', payload);
-    const participantsState = listParticipants();
-    participantsState.forEach((participant) => {
-      const normalized = normalizeProgressMap(
+    const codes = Array.from(dirtyParticipants);
+    const participants = listParticipants();
+    const payload: Array<Record<string, unknown>> = [];
+    const snapshots = new Map<string, Record<string, LearningProgress>>();
+    codes.forEach((code) => {
+      const participant = participants.find((item) => item.code === code);
+      if (!participant) {
+        dirtyParticipants.delete(code);
+        return;
+      }
+      payload.push(serializeParticipantForRemote(participant));
+      const normalizedProgress = normalizeProgressMap(
         participant.lessonProgress as Record<string, Partial<LearningProgress>>,
         participant.code,
       );
-      saveCachedSnapshot(participant.code, normalized, { dirty: false });
+      snapshots.set(code, normalizedProgress);
     });
-    await hydrateFromRemote();
-    reapplyCachedProgress();
+    if (!payload.length) return;
+    await remoteUpsertRecords('participants', payload);
+    payload.forEach((record) => {
+      const code = String(record.code);
+      dirtyParticipants.delete(code);
+      const progressSnapshot = snapshots.get(code);
+      if (progressSnapshot) {
+        saveCachedSnapshot(code, progressSnapshot, { dirty: false });
+      }
+    });
   } catch (error) {
     console.warn('Falha ao sincronizar participantes com backend:', error);
   } finally {
@@ -126,6 +162,19 @@ function normalizeOptionalString(value: unknown): string | undefined {
   if (typeof value !== 'string') return undefined;
   const trimmed = value.trim();
   return trimmed.length > 0 ? trimmed : undefined;
+}
+
+function normalizeOptionalNumber(value: unknown): number | undefined {
+  if (typeof value === 'number' && Number.isFinite(value)) {
+    return value;
+  }
+  if (typeof value === 'string') {
+    const trimmed = value.trim();
+    if (trimmed.length === 0) return undefined;
+    const parsed = Number(trimmed);
+    if (Number.isFinite(parsed)) return parsed;
+  }
+  return undefined;
 }
 
 function normalizeDate(value: unknown, fallback: Date = new Date()) {
@@ -214,8 +263,36 @@ function mergeProgressMaps(
   return merged;
 }
 
+export function computeParticipantDisplayName(params: {
+  code: string;
+  displayName?: string;
+  firstName?: string;
+  lastName?: string;
+}) {
+  const explicit = params.displayName?.trim();
+  if (explicit) return explicit;
+  const fullName = [params.firstName, params.lastName]
+    .map((segment) => segment?.trim())
+    .filter(Boolean)
+    .join(' ')
+    .trim();
+  if (fullName.length > 0) return fullName;
+  return params.code;
+}
+
+function markParticipantDirty(code: string) {
+  dirtyParticipants.add(code.toUpperCase());
+}
+
 type ParticipantSnapshot = {
   displayName?: string;
+  firstName?: string;
+  lastName?: string;
+  age?: number | null;
+  gender?: string;
+  fatherName?: string;
+  motherName?: string;
+  careHouse?: string;
   createdAt?: Date;
   lastActiveAt?: Date;
   lessonProgress?: Record<string, LearningProgress>;
@@ -240,9 +317,29 @@ function applyParticipantSnapshot(
   const createdAt = snapshot.createdAt ?? existing?.createdAt ?? new Date();
   const lastActiveAt = snapshot.lastActiveAt ?? existing?.lastActiveAt ?? createdAt;
 
+  const firstName = normalizeOptionalString(snapshot.firstName ?? existing?.firstName);
+  const lastName = normalizeOptionalString(snapshot.lastName ?? existing?.lastName);
+  const gender = normalizeOptionalString(snapshot.gender ?? existing?.gender);
+  const fatherName = normalizeOptionalString(snapshot.fatherName ?? existing?.fatherName);
+  const motherName = normalizeOptionalString(snapshot.motherName ?? existing?.motherName);
+  const age = normalizeOptionalNumber(snapshot.age ?? existing?.age);
+  const careHouse = normalizeOptionalString(snapshot.careHouse ?? existing?.careHouse);
+
   const participantState = {
     code: normalizedCode,
-    displayName: snapshot.displayName ?? existing?.displayName ?? undefined,
+    displayName: computeParticipantDisplayName({
+      code: normalizedCode,
+      displayName: snapshot.displayName ?? existing?.displayName,
+      firstName: firstName ?? existing?.firstName,
+      lastName: lastName ?? existing?.lastName,
+    }),
+    firstName,
+    lastName,
+    age,
+    gender,
+    fatherName,
+    motherName,
+    careHouse,
     createdAt,
     lastActiveAt,
     lessonProgress: mergedProgress,
@@ -258,12 +355,24 @@ function applyParticipantSnapshot(
 function toParticipantRecord(state: {
   code: string;
   displayName?: string;
+  firstName?: string;
+  lastName?: string;
+  age?: number | null;
+  gender?: string;
+  fatherName?: string;
+  motherName?: string;
   createdAt: Date;
   lastActiveAt?: Date;
 }): ParticipantRecord {
   return {
     code: state.code,
     displayName: state.displayName,
+    firstName: state.firstName,
+    lastName: state.lastName,
+    age: state.age ?? undefined,
+    gender: state.gender,
+    fatherName: state.fatherName,
+    motherName: state.motherName,
     createdAt: state.createdAt,
     lastActiveAt: state.lastActiveAt,
   };
@@ -304,20 +413,117 @@ export function generateAccessCode(length = 6) {
   return Array.from(bytes, (b) => alphabet[b % alphabet.length]).join('');
 }
 
-export async function createParticipant(displayName?: string) {
+export async function createParticipant(input: ParticipantProfileInput): Promise<ParticipantRecord> {
+  const firstNameValue = typeof input.firstName === 'string' ? input.firstName.trim() : '';
+  if (!firstNameValue) {
+    throw new Error('first_name_required');
+  }
+
+  const lastName = normalizeOptionalString(input.lastName);
+  const age = normalizeOptionalNumber(input.age ?? undefined);
+  const gender = normalizeOptionalString(input.gender);
+  const fatherName = normalizeOptionalString(input.fatherName);
+  const motherName = normalizeOptionalString(input.motherName);
+  const careHouse = normalizeOptionalString(input.careHouse);
+
   const code = generateAccessCode();
   const now = new Date();
   clearCachedSnapshot(code);
-  upsertParticipant({
+
+  const participantState = {
     code,
-    displayName: displayName?.trim() || undefined,
+    displayName: computeParticipantDisplayName({
+      code,
+      firstName: firstNameValue,
+      lastName,
+    }),
+    firstName: firstNameValue,
+    lastName,
+    age,
+    gender,
+    fatherName,
+    motherName,
+    careHouse,
     createdAt: now,
     lastActiveAt: now,
     lessonProgress: {},
-  });
+  };
+
+  upsertParticipant(participantState);
   saveCachedSnapshot(code, {});
+  markParticipantDirty(code);
   scheduleParticipantSync(true);
-  return code;
+  return toParticipantRecord(participantState);
+}
+
+export async function updateParticipant(code: string, patch: ParticipantProfilePatch): Promise<ParticipantRecord> {
+  const normalizedCode = code.toUpperCase();
+  const participants = listParticipants();
+  const existing = participants.find((participant) => participant.code === normalizedCode);
+  if (!existing) {
+    throw new Error('participant_not_found');
+  }
+
+  const updatedFirstName = patch.firstName !== undefined
+    ? (normalizeOptionalString(patch.firstName) ?? '')
+    : normalizeOptionalString(existing.firstName) ?? '';
+  if (!updatedFirstName) {
+    throw new Error('first_name_required');
+  }
+
+  const updatedLastName = patch.lastName !== undefined
+    ? normalizeOptionalString(patch.lastName)
+    : normalizeOptionalString(existing.lastName);
+  const updatedAge = patch.age !== undefined ? normalizeOptionalNumber(patch.age) : (typeof existing.age === 'number' ? existing.age : undefined);
+  const updatedGender = patch.gender !== undefined
+    ? normalizeOptionalString(patch.gender)
+    : normalizeOptionalString(existing.gender);
+  const updatedFatherName = patch.fatherName !== undefined
+    ? normalizeOptionalString(patch.fatherName)
+    : normalizeOptionalString(existing.fatherName);
+  const updatedMotherName = patch.motherName !== undefined
+    ? normalizeOptionalString(patch.motherName)
+    : normalizeOptionalString(existing.motherName);
+  const updatedCareHouse = patch.careHouse !== undefined
+    ? normalizeOptionalString(patch.careHouse)
+    : normalizeOptionalString(existing.careHouse);
+
+  const participantState = applyParticipantSnapshot(
+    normalizedCode,
+    {
+      firstName: updatedFirstName,
+      lastName: updatedLastName,
+      age: updatedAge,
+      gender: updatedGender,
+      fatherName: updatedFatherName,
+      motherName: updatedMotherName,
+      careHouse: updatedCareHouse,
+      createdAt: existing.createdAt,
+      lastActiveAt: existing.lastActiveAt,
+      lessonProgress: existing.lessonProgress ?? {},
+    },
+    { updateCache: true, dirty: true },
+  );
+
+  markParticipantDirty(normalizedCode);
+  scheduleParticipantSync(true);
+  return toParticipantRecord(participantState);
+}
+
+export async function deleteParticipant(code: string): Promise<void> {
+  const normalizedCode = code.toUpperCase();
+  removeParticipant(normalizedCode);
+  clearCachedSnapshot(normalizedCode);
+
+  if (!isBackendAvailable()) return;
+
+  try {
+    await remoteDeleteRecord('participants', normalizedCode);
+    await hydrateFromRemote();
+  } catch (error) {
+    console.error('Falha ao remover participante no backend:', error);
+    throw error;
+  }
 }
 
 export async function fetchParticipant(code: string): Promise<ParticipantRecord | null> {
@@ -338,10 +544,24 @@ export async function fetchParticipant(code: string): Promise<ParticipantRecord 
 
     const remoteProgress = normalizeLessonProgressPayload(data.lessonProgress, upperCode);
     const mergedProgress = mergeProgressMaps(remoteProgress, cachedProgress.lessons);
+    const firstName = normalizeOptionalString(data.firstName);
+    const lastName = normalizeOptionalString(data.lastName);
+    const gender = normalizeOptionalString(data.gender);
+    const fatherName = normalizeOptionalString(data.fatherName);
+    const motherName = normalizeOptionalString(data.motherName);
+    const age = normalizeOptionalNumber(data.age);
+    const careHouse = normalizeOptionalString(data.careHouse);
     const participantState = applyParticipantSnapshot(
       upperCode,
       {
         displayName: data.displayName ? String(data.displayName) : undefined,
+        firstName,
+        lastName,
+        age,
+        gender,
+        fatherName,
+        motherName,
+        careHouse,
         createdAt: normalizeDate(data.createdAt),
         lastActiveAt: data.lastActiveAt ? normalizeDate(data.lastActiveAt) : undefined,
         lessonProgress: mergedProgress,
@@ -384,6 +604,7 @@ export async function saveLessonProgress(params: SaveLessonProgressParams) {
   recordLessonProgress(participantId, params.lessonId, progress);
   saveCachedLesson(participantId, progress);
   touchParticipant(participantId, { lastActiveAt: now });
+  markParticipantDirty(participantId);
   scheduleParticipantSync(progress.completed);
 }
 
@@ -419,12 +640,27 @@ export function subscribeToProgress(participantId: string, callback: (progress: 
 }
 
 export async function getAllParticipants() {
+  if (isBackendAvailable()) {
+    await hydrateFromRemote();
+  }
   return listParticipants().map((participant) => {
     const progressList = Object.values(participant.lessonProgress ?? {}).map((entry) => ({ ...entry }));
     const sorted = progressList.sort((a, b) => b.updatedAt.getTime() - a.updatedAt.getTime());
     return {
       id: participant.code,
-      displayName: participant.displayName || participant.code,
+      displayName: computeParticipantDisplayName({
+        code: participant.code,
+        displayName: participant.displayName,
+        firstName: participant.firstName,
+        lastName: participant.lastName,
+      }),
+      firstName: participant.firstName,
+      lastName: participant.lastName,
+      age: participant.age,
+      gender: participant.gender,
+      fatherName: participant.fatherName,
+      motherName: participant.motherName,
+      careHouse: participant.careHouse,
       totalLessons: sorted.length,
       completedLessons: sorted.filter((p) => p.completed).length,
       totalWatchTime: sorted.reduce((total, p) => total + (p.lastPosition || 0), 0),
@@ -463,12 +699,15 @@ export async function resetLessonCompletion(code: string, lessonId: string) {
     const normalized = createLearningProgress(participantId, lessonId, updated);
     saveCachedLesson(participantId, normalized);
   }
+  markParticipantDirty(participantId);
   scheduleParticipantSync(true);
 }
 
 export function markParticipantActive(code: string) {
   const now = new Date();
-  touchParticipant(code.toUpperCase(), { lastActiveAt: now });
+  const upper = code.toUpperCase();
+  touchParticipant(upper, { lastActiveAt: now });
+  markParticipantDirty(upper);
   scheduleParticipantSync();
 }
 
