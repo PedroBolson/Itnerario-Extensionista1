@@ -1,5 +1,5 @@
 import { createContext, useContext, useState, useEffect, type ReactNode } from 'react';
-import { getAllProgressForParticipant, subscribeToProgress, type LearningProgress } from '../lib/progress';
+import { getAllProgressForParticipant, subscribeToProgress, type LearningProgress, hydrateProgressFromCache } from '../lib/progress';
 
 export interface Learner {
     id: string;
@@ -34,6 +34,8 @@ export function LearnerProvider({ children }: LearnerProviderProps) {
             setProgress([]);
             return;
         }
+
+        hydrateProgressFromCache();
 
         let isMounted = true;
         setIsLoadingProgress(true);
