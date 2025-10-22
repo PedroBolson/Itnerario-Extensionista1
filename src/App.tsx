@@ -84,8 +84,10 @@ function AppShell() {
 }
 
 function App() {
+  const basename = new URL(import.meta.env.BASE_URL, window.location.href).pathname;
+
   return (
-    <Router>
+    <Router basename={basename}>
       <AuthProvider>
         <LearnerProvider>
           <AppShell />
