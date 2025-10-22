@@ -114,7 +114,7 @@ async function postAction<T>(body: Record<string, unknown>, opts?: { requireNonc
   const resp = await fetch(`${BASE_URL}?${query}`, {
     method: 'POST',
     mode: 'cors',
-    headers: { 'Content-Type': 'application/json' },
+    headers: { 'Content-Type': 'text/plain;charset=UTF-8' },
     body: JSON.stringify(payload),
   });
   const json = await parseResponse<T>(resp);
