@@ -146,6 +146,18 @@ export function removeSnapshot(code?: string) {
   storage.removeItem(keyFor(code));
 }
 
+export function isolateSnapshot(code: string) {
+  const storage = safeStorage();
+  if (!storage) return;
+  const currentKey = keyFor(code);
+  for (let index = storage.length - 1; index >= 0; index -= 1) {
+    const key = storage.key(index);
+    if (key && key.startsWith(PREFIX) && key !== currentKey) {
+      storage.removeItem(key);
+    }
+  }
+}
+
 export function deserializeLessons(entries: Record<string, SerializedLesson> | null): Record<string, LearningProgress> {
   if (!entries) return {};
   const lessons: Record<string, LearningProgress> = {};

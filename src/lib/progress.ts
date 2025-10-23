@@ -18,6 +18,7 @@ import {
   saveSnapshot as saveCachedSnapshot,
   removeSnapshot as clearCachedSnapshot,
   deserializeLessons as deserializeCachedLessons,
+  isolateSnapshot as isolateCachedSnapshot,
 } from './progressCache';
 
 export type { ParticipantRecord, LearningProgress } from './types';
@@ -528,6 +529,7 @@ export async function deleteParticipant(code: string): Promise<void> {
 
 export async function fetchParticipant(code: string): Promise<ParticipantRecord | null> {
   const upperCode = code.toUpperCase();
+  isolateCachedSnapshot(upperCode);
   const cachedProgress = loadCachedProgress(upperCode);
   const cachedState = applyParticipantSnapshot(
     upperCode,
