@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react';
-import { AuthContext, type AuthContextValue } from './auth';
+import { AuthContext, type AuthContextValue, type PendingLogin } from './auth';
 import type { UserRecord } from '../lib/users';
-import { changeUserPassword, verifyUserCredentials } from '../lib/users';
+import { changeUserPassword, initiateLogin, completeLogin } from '../lib/users';
 import { remoteLogout } from '../lib/remoteStore';
 
 type ChallengeState = {
@@ -81,10 +81,12 @@ function clearAttempts(key: string) {
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<UserRecord | null>(null);
   const [loading] = useState(false);
+  const [pendingLogin, setPendingLogin] = useState<PendingLogin | null>(null);
 
   const value = useMemo<AuthContextValue>(() => ({
     user,
     loading,
+    pendingLogin,
     async signIn(username: string, password: string, challengeAnswer?: number) {
       const trimmedUsername = username.trim();
       const { state, key } = getAttemptState(trimmedUsername);
@@ -104,18 +106,26 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         attempts.set(key, state);
       }
 
-      let account: UserRecord | null = null;
       try {
-        account = await verifyUserCredentials(trimmedUsername, password);
+        const result = await initiateLogin(trimmedUsername, password);
+        if (result.status === 'otp_required') {
+          clearAttempts(key);
+          setPendingLogin({
+            email: result.email,
+            token: result.token,
+            expiresAt: Date.now() + result.expiresIn * 1000,
+          });
+          return 'otp_required';
+        }
+
+        clearAttempts(key);
+        setPendingLogin(null);
+        setUser(result.user);
+        return 'success';
       } catch (err) {
         registerFailure(key, state);
-        throw err;
-      }
-
-      if (!account) {
-        registerFailure(key, state);
-        const error = new Error('Credenciais inválidas') as AuthError;
-        error.code = 'auth/invalid-credentials';
+        const error = err as AuthError;
+        if (!error.code) error.code = 'auth/invalid-credentials';
         if (state.challenge) {
           error.challenge = { question: state.challenge.question };
         } else if (state.count >= ATTEMPT_THRESHOLD) {
@@ -126,13 +136,39 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         }
         throw error;
       }
+    },
+    async confirmSignIn(otpCode: string) {
+      const current = pendingLogin;
+      if (!current) {
+        const error = new Error('Nenhum login pendente.') as AuthError;
+        error.code = 'auth/no-pending-login';
+        throw error;
+      }
+      const normalizedOtp = otpCode.trim();
+      if (!normalizedOtp) {
+        const error = new Error('Informe o código enviado por e-mail.') as AuthError;
+        error.code = 'auth/missing-otp';
+        throw error;
+      }
 
-      clearAttempts(key);
+      const account = await completeLogin(current.token, normalizedOtp);
+      clearAttempts(normalizeUsername(current.email));
+      setPendingLogin(null);
       setUser(account);
+    },
+    cancelPendingLogin() {
+      if (pendingLogin) {
+        clearAttempts(normalizeUsername(pendingLogin.email));
+      }
+      setPendingLogin(null);
     },
     async signOut() {
       await remoteLogout().catch(() => undefined);
+      if (user) {
+        clearAttempts(normalizeUsername(user.email));
+      }
       setUser(null);
+      setPendingLogin(null);
     },
     async changePassword(currentPassword: string, newPassword: string) {
       if (!user) {
@@ -143,7 +179,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
       await changeUserPassword(user.uid, currentPassword, newPassword);
     },
-  }), [user, loading]);
+  }), [user, loading, pendingLogin]);
 
   return (
     <AuthContext.Provider value={value}>

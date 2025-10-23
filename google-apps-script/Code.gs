@@ -285,9 +285,12 @@ function doPost(e){
   if (hitLimit('rl:'+key, 300)) return buildResponse({ ok:false, error:'rate_limited' }, 429);
 
   // Auth
-  if (action === 'auth_login')   return handleAuthLogin(body);
+  if (action === 'auth_login')   return handleAuthLogin(body, e);
+  if (action === 'auth_login_verify') return handleAuthLoginVerify(body);
   if (action === 'auth_logout')  return handleAuthLogout(body);
   if (action === 'auth_change_password') return handleAuthChangePassword(body, e);
+  if (action === 'auth_password_reset_request') return handleAuthPasswordResetRequest(body, e);
+  if (action === 'auth_password_reset_confirm') return handleAuthPasswordResetConfirm(body, e);
 
   // Nonce (reforço para escrita)
   const table = body.table;
@@ -347,13 +350,30 @@ function deleteSession(tok){
   PropertiesService.getScriptProperties().deleteProperty(sessionKey(tok));
 }
 
+function revokeUserSessions(uid){
+  if (!uid) return;
+  const props = PropertiesService.getScriptProperties();
+  const entries = props.getProperties();
+  Object.keys(entries || {}).forEach((key) => {
+    if (!key || !key.startsWith('sess:')) return;
+    try {
+      const data = JSON.parse(entries[key]);
+      if (data && data.uid && String(data.uid) === String(uid)) {
+        props.deleteProperty(key);
+      }
+    } catch (_err) {
+      props.deleteProperty(key);
+    }
+  });
+}
+
 function getActorFromRequest(e, body){
   const hdr = e?.headers || {};
   const tok = (hdr['x-session-token'] || hdr['X-Session-Token'] || (body && body.sessionToken) || '').trim();
   return getSession(tok); // {uid, role, ...} | null
 }
 
-function handleAuthLogin(body){
+function handleAuthLogin(body, e){
   const email = String(body.email || '').trim().toLowerCase();
   const password = String(body.password || '');
   if (!email || !password) return buildResponse({ ok:false, error:'missing_credentials' }, 400);
@@ -362,9 +382,67 @@ function handleAuthLogin(body){
   if (!u || !bool(u.isActive)) return buildResponse({ ok:false, error:'invalid_user' }, 401);
   if (!verifyHash(password, u.passwordHash)) return buildResponse({ ok:false, error:'invalid_password' }, 401);
 
-  const { token, actor } = createSession({ uid:u.uid, role:u.role, email:u.email, fullName:u.fullName });
+  const throttleKey = 'otp-login:'+u.uid;
+  if (hitLimit(throttleKey, 10)) return buildResponse({ ok:false, error:'otp_rate_limited' }, 429);
+
+  const otpCode = generateOtpCode();
+  const otpToken = Utilities.getUuid();
+  const salt = Utilities.getUuid().slice(0, 8);
+  const expiresAt = Date.now() + OTP_TTL_SEC * 1000;
+
+  const record = {
+    uid: u.uid,
+    email: u.email,
+    fullName: u.fullName || u.email,
+    role: u.role || 'user',
+    salt,
+    codeHash: hashOtp(otpCode, salt),
+    attempts: 0,
+    expiresAt,
+  };
+  persistOtpRecord('login:', otpToken, record);
+
+  sendEmail({
+    to: u.email,
+    subject: 'Código de verificação - Itinerário Extensionista',
+    htmlBody: loginOtpEmailHtml(otpCode),
+    textBody: 'Seu código de verificação é: '+otpCode+'\nEle expira em 5 minutos.',
+  });
+
+  return buildResponse({ ok:true, otp:true, token: otpToken, expiresIn: OTP_TTL_SEC }, 200);
+}
+function handleAuthLoginVerify(body){
+  const token = String(body.token || '').trim();
+  const code = String(body.otp || body.code || '').trim();
+  if (!token || !code) return buildResponse({ ok:false, error:'missing_otp' }, 400);
+
+  const record = otpRecord('login:', token);
+  if (!record) return buildResponse({ ok:false, error:'otp_expired' }, 400);
+  if (record.expiresAt && Date.now() > record.expiresAt) {
+    clearOtpRecord('login:', token);
+    return buildResponse({ ok:false, error:'otp_expired' }, 400);
+  }
+
+  const expected = hashOtp(code, record.salt || '');
+  if (expected !== record.codeHash) {
+    record.attempts = (record.attempts || 0) + 1;
+    if (record.attempts >= OTP_MAX_ATTEMPTS) {
+      clearOtpRecord('login:', token);
+      return buildResponse({ ok:false, error:'otp_max_attempts' }, 403);
+    }
+    persistOtpRecord('login:', token, record);
+    return buildResponse({ ok:false, error:'invalid_otp' }, 400);
+  }
+
+  clearOtpRecord('login:', token);
+  const { token: sessionToken, actor } = createSession({
+    uid: record.uid,
+    role: record.role,
+    email: record.email,
+    fullName: record.fullName,
+  });
   const safeActor = { uid: actor.uid, role: actor.role, email: actor.email, fullName: actor.fullName, exp: actor.exp };
-  return buildResponse({ ok:true, token, actor: safeActor }, 200);
+  return buildResponse({ ok:true, token: sessionToken, actor: safeActor }, 200);
 }
 function handleAuthLogout(body){
   deleteSession(String(body.sessionToken || ''));
@@ -390,6 +468,95 @@ function handleAuthChangePassword(body, e){
   let sheetRecord = toSheetRecord('users', updatedRecord);
   sheetRecord[toSheetKey('users', 'updatedAt')] = nowStr();
   writeRow(sheet, headers, idx, sheetRecord);
+  revokeUserSessions(actor.uid);
+  return buildResponse({ ok:true }, 200);
+}
+
+function handleAuthPasswordResetRequest(body){
+  const email = String(body.email || '').trim().toLowerCase();
+  const baseUrlRaw = String(body.resetBaseUrl || '').trim();
+  if (!email) return buildResponse({ ok:true }, 200);
+
+  if (hitLimit('otp-reset:'+email, 10)) return buildResponse({ ok:false, error:'otp_rate_limited' }, 429);
+
+  const user = findUserByEmail(email);
+  if (!user || !bool(user.isActive)) return buildResponse({ ok:true }, 200);
+
+  const token = Utilities.getUuid();
+  const otpCode = generateOtpCode();
+  const salt = Utilities.getUuid().slice(0, 8);
+  const expiresAt = Date.now() + RESET_TTL_SEC * 1000;
+
+  const record = {
+    uid: user.uid,
+    email: user.email,
+    salt,
+    codeHash: hashOtp(otpCode, salt),
+    attempts: 0,
+    expiresAt,
+  };
+  persistOtpRecord('reset:', token, record);
+
+  const cleanedBase = baseUrlRaw ? baseUrlRaw.replace(/\/+$/, '') : '';
+  const link = cleanedBase ? (cleanedBase + '/resetar-senha?token=' + encodeURIComponent(token)) : '';
+
+  sendEmail({
+    to: user.email,
+    subject: 'Redefinição de senha - Itinerário Extensionista',
+    htmlBody: resetOtpEmailHtml(otpCode, link),
+    textBody: 'Seu código para redefinir a senha é: '+otpCode+'\nEle expira em 10 minutos.\n'+(link ? 'Abra: '+link : ''),
+  });
+
+  return buildResponse({ ok:true }, 200);
+}
+
+function handleAuthPasswordResetConfirm(body){
+  const token = String(body.token || '').trim();
+  const code = String(body.otp || body.code || '').trim();
+  const newPassword = String(body.newPassword || '');
+  if (!token || !code || !newPassword) return buildResponse({ ok:false, error:'missing_parameters' }, 400);
+  if (newPassword.length < 6) return buildResponse({ ok:false, error:'weak_password' }, 400);
+
+  const record = otpRecord('reset:', token);
+  if (!record) return buildResponse({ ok:false, error:'otp_expired' }, 400);
+  if (record.expiresAt && Date.now() > record.expiresAt) {
+    clearOtpRecord('reset:', token);
+    return buildResponse({ ok:false, error:'otp_expired' }, 400);
+  }
+
+  const expected = hashOtp(code, record.salt || '');
+  if (expected !== record.codeHash) {
+    record.attempts = (record.attempts || 0) + 1;
+    if (record.attempts >= OTP_MAX_ATTEMPTS) {
+      clearOtpRecord('reset:', token);
+      return buildResponse({ ok:false, error:'otp_max_attempts' }, 403);
+    }
+    persistOtpRecord('reset:', token, record);
+    return buildResponse({ ok:false, error:'invalid_otp' }, 400);
+  }
+
+  const user = getById('users', record.uid);
+  if (!user) {
+    clearOtpRecord('reset:', token);
+    return buildResponse({ ok:false, error:'not_found' }, 404);
+  }
+
+  const { sheet, headers } = getSheetAndHeaders('users');
+  const idx = findRowByKey(sheet, headers, SCHEMA.users.key, record.uid);
+  if (idx <= 0) {
+    clearOtpRecord('reset:', token);
+    return buildResponse({ ok:false, error:'not_found' }, 404);
+  }
+
+  const updatedRecord = {
+    ...user,
+    passwordHash: encodeHash(newPassword),
+  };
+  let sheetRecord = toSheetRecord('users', updatedRecord);
+  sheetRecord[toSheetKey('users', 'updatedAt')] = nowStr();
+  writeRow(sheet, headers, idx, sheetRecord);
+  clearOtpRecord('reset:', token);
+  revokeUserSessions(record.uid);
   return buildResponse({ ok:true }, 200);
 }
 
@@ -414,6 +581,71 @@ function findUserByEmail(email){
   const { rows } = readTable('users');
   const e = String(email || '').trim().toLowerCase();
   return rows.find(r => String(r.email||'').toLowerCase() === e);
+}
+
+/***** ================= OTP / E-MAIL HELPERS ================= *****/
+
+const OTP_TTL_SEC = 5 * 60; // 5 minutos
+const RESET_TTL_SEC = 10 * 60; // 10 minutos
+const OTP_MAX_ATTEMPTS = 5;
+
+function otpCache(){ return CacheService.getScriptCache(); }
+function otpCacheKey(prefix, token){ return prefix + token; }
+
+function otpRecord(prefix, token){
+  const raw = otpCache().get(otpCacheKey(prefix, token));
+  if (!raw) return null;
+  try { return JSON.parse(raw); }
+  catch (_) { return null; }
+}
+
+function persistOtpRecord(prefix, token, record){
+  const ttl = Math.max(1, Math.ceil(((record.expiresAt || Date.now()) - Date.now()) / 1000));
+  otpCache().put(otpCacheKey(prefix, token), JSON.stringify(record), ttl);
+}
+
+function clearOtpRecord(prefix, token){
+  otpCache().remove(otpCacheKey(prefix, token));
+}
+
+function generateOtpCode(){
+  return Utilities.formatString('%06d', Math.floor(Math.random() * 1000000));
+}
+
+function hashOtp(code, salt){
+  const digest = Utilities.computeDigest(Utilities.DigestAlgorithm.SHA_256, salt + code);
+  return Utilities.base64Encode(digest);
+}
+
+function sendEmail({ to, subject, htmlBody, textBody }){
+  const payload = {
+    to,
+    subject,
+    htmlBody,
+    name: 'Itinerário Extensionista',
+    body: textBody || ' ',
+  };
+  MailApp.sendEmail(payload);
+}
+
+function loginOtpEmailHtml(code){
+  return '<div style="font-family:Arial,Helvetica,sans-serif;line-height:1.6;color:#0f172a">'
+    + '<h2 style="margin:0 0 16px;font-size:20px;color:#1d4ed8">Código de verificação</h2>'
+    + '<p>Use o código abaixo para concluir seu acesso ao painel administrativo.</p>'
+    + '<p style="font-size:28px;font-weight:700;letter-spacing:4px;margin:16px 0;color:#1d4ed8">'+code+'</p>'
+    + '<p style="font-size:12px;color:#475569">O código expira em 5 minutos. Se você não iniciou este acesso, ignore este e-mail.</p>'
+    + '</div>';
+}
+
+function resetOtpEmailHtml(code, link){
+  const cleanLink = link ? ('<p><a href="'+link+'" style="color:#1d4ed8;font-weight:600">Clique aqui para abrir a página de redefinição</a></p>') : '';
+  return '<div style="font-family:Arial,Helvetica,sans-serif;line-height:1.6;color:#0f172a">'
+    + '<h2 style="margin:0 0 16px;font-size:20px;color:#1d4ed8">Redefinição de senha</h2>'
+    + '<p>Use o código abaixo para redefinir sua senha.</p>'
+    + '<p style="font-size:28px;font-weight:700;letter-spacing:4px;margin:16px 0;color:#1d4ed8">'+code+'</p>'
+    + cleanLink
+    + '<p style="font-size:12px;color:#475569">O código expira em 10 minutos. Se você não solicitou, ignore este e-mail.</p>'
+    + '</div>';
 }
 
 /***** ================= RBAC SIMPLES (admin/user) ================= *****/
@@ -885,7 +1117,7 @@ function requiresNonce(action){
   return ['create','update','upsert','delete','batch_upsert','auth_change_password'].indexOf(action) >= 0;
 }
 function requiresCaptcha(action){
-  return ['auth_login','create','update','upsert','delete','batch_upsert'].indexOf(action) >= 0;
+  return ['auth_login','auth_password_reset_request','create','update','upsert','delete','batch_upsert'].indexOf(action) >= 0;
 }
 function verifyRecaptcha(token){
   try{

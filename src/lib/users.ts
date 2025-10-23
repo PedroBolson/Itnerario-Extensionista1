@@ -13,9 +13,12 @@ import { hydrateFromRemote } from './remoteSync';
 import {
   isBackendAvailable,
   remoteChangePassword,
+  remoteConfirmPasswordReset,
   remoteCreateRecord,
   remoteDeleteRecord,
-  remoteLogin,
+  remoteLoginInit,
+  remoteLoginVerify,
+  remoteRequestPasswordReset,
   remoteUpdateRecord,
 } from './remoteStore';
 import type { UserRecord, UserRole } from './types';
@@ -40,6 +43,7 @@ export interface UpdateUserInput {
 export function normalizeRole(input: unknown): UserRole {
   return input === 'admin' ? 'admin' : 'user';
 }
+
 
 function ensureCrypto() {
   if (typeof crypto !== 'undefined' && crypto.subtle) {
@@ -213,26 +217,37 @@ export async function changeUserPassword(uid: string, currentPassword: string, n
   setUserPassword(uid, newPassword);
 }
 
-export async function verifyUserCredentials(email: string, password: string): Promise<UserRecord | null> {
+export type InitiateLoginResult =
+  | { status: 'success'; user: UserRecord }
+  | { status: 'otp_required'; token: string; email: string; expiresIn: number };
+
+export async function initiateLogin(email: string, password: string): Promise<InitiateLoginResult> {
+  const normalizedEmail = email.trim().toLowerCase();
+
   if (isBackendAvailable()) {
-    const actor = (await remoteLogin(email.trim().toLowerCase(), password)) as
-      | { uid?: string }
-      | null;
-    await hydrateFromRemote();
-    const uid = actor && typeof actor.uid === 'string' ? actor.uid : undefined;
-    if (uid) {
-      const user = findUserById(uid);
-      if (user) {
-        const { passwordHash, ...rest } = user;
-        return rest;
-      }
+    const response = await remoteLoginInit(normalizedEmail, password);
+    if (response && (response as Record<string, unknown>).otp) {
+      const token = String((response as Record<string, unknown>).token || '');
+      const expiresInRaw = Number((response as Record<string, unknown>).expiresIn || DEFAULT_OTP_TTL);
+      return {
+        status: 'otp_required',
+        token,
+        email: normalizedEmail,
+        expiresIn: Number.isFinite(expiresInRaw) ? expiresInRaw : DEFAULT_OTP_TTL,
+      };
     }
-    return null;
-  } const record = findUserByEmail(email);
-  if (!record) return null;
+    throw Object.assign(new Error('Fluxo de login inválido'), { code: 'auth/unexpected-response' });
+  }
+
+  const record = findUserByEmail(normalizedEmail);
+  if (!record) return Promise.reject(Object.assign(new Error('Credenciais inválidas'), { code: 'auth/invalid-credentials' }));
 
   const isValid = record.passwordHash ? await verifyPassword(record.passwordHash, password) : false;
-  if (!isValid) return null;
+  if (!isValid) {
+    const error = new Error('Credenciais inválidas');
+    (error as Error & { code?: string }).code = 'auth/invalid-credentials';
+    throw error;
+  }
 
   if (!record.isActive) {
     const error = new Error('Conta desativada. Contate um administrador.');
@@ -241,23 +256,51 @@ export async function verifyUserCredentials(email: string, password: string): Pr
   }
 
   const { passwordHash, ...user } = record;
-  return user;
+  return { status: 'success', user };
+}
+
+export async function completeLogin(token: string, otpCode: string): Promise<UserRecord> {
+  if (!isBackendAvailable()) {
+    throw new Error('BACKEND indisponível');
+  }
+  const actor = (await remoteLoginVerify(token, otpCode)) as { uid?: string } | null;
+  await hydrateFromRemote();
+  const uid = actor && typeof actor.uid === 'string' ? actor.uid : undefined;
+  if (uid) {
+    const user = findUserById(uid);
+    if (user) {
+      const { passwordHash, ...rest } = user;
+      return rest;
+    }
+  }
+  throw new Error('Não foi possível finalizar o login');
 }
 
 export async function verifyCurrentPassword(uid: string, password: string): Promise<boolean> {
-  if (isBackendAvailable()) {
-    try {
-      const user = findUserById(uid);
-      if (!user) return false;
-      await remoteLogin(user.email, password);
-      await hydrateFromRemote();
-      return true;
-    } catch {
-      return false;
-    }
-  }
-
   const record = findUserById(uid);
   if (!record) return false;
   return record.passwordHash ? verifyPassword(record.passwordHash, password) : false;
+}
+
+const DEFAULT_OTP_TTL = 300;
+
+export async function requestPasswordReset(email: string, resetBaseUrl: string): Promise<void> {
+  if (!email.trim()) return;
+  if (isBackendAvailable()) {
+    await remoteRequestPasswordReset(email.trim().toLowerCase(), resetBaseUrl);
+    return;
+  }
+}
+
+export async function confirmPasswordReset(params: { token: string; otp: string; newPassword: string }): Promise<void> {
+  if (!params.token || !params.otp || !params.newPassword) {
+    throw new Error('missing_parameters');
+  }
+  if (params.newPassword.length < 6) {
+    throw new Error('Senha deve ter pelo menos 6 caracteres');
+  }
+  if (isBackendAvailable()) {
+    await remoteConfirmPasswordReset(params.token, params.otp, params.newPassword);
+    await hydrateFromRemote();
+  }
 }

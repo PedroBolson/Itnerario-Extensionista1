@@ -8,6 +8,7 @@ import { ThemeSwitch } from './components/ThemeSwitch';
 import { LoginPage } from './pages/admin/LoginPage';
 import { DashboardPage } from './pages/admin/DashboardPage';
 import { ParticipantsPage } from './pages/admin/ParticipantsPage';
+import { PasswordResetPage } from './pages/admin/PasswordResetPage';
 import { ProtectedRoute } from './routes/ProtectedRoute';
 import { AuthProvider } from './context/AuthContext';
 import { CoursesPage } from './pages/principal/CoursesPage';
@@ -26,6 +27,7 @@ function AnimatedRoutes() {
         <Route path="/criar-cv" element={<FormPage />} />
         <Route path="/cursos" element={<CoursesPage />} />
         <Route path="/admin" element={<LoginPage />} />
+        <Route path="/resetar-senha" element={<PasswordResetPage />} />
         <Route element={<ProtectedRoute />}>
           <Route path="/dashboard" element={<DashboardPage />} />
           <Route path="/dashboard/participants" element={<ParticipantsPage />} />
@@ -37,8 +39,9 @@ function AnimatedRoutes() {
 
 function AppShell() {
   const location = useLocation();
-  const hideNav = location.pathname.startsWith('/admin') && location.pathname === '/admin';
-  const isAdminView = location.pathname.startsWith('/dashboard');
+  const pathname = location.pathname;
+  const hideNav = pathname === '/admin' || pathname === '/resetar-senha';
+  const isAdminView = pathname.startsWith('/dashboard');
   const { signOut, user } = useAuth();
 
   const handleAdminSignOut = async () => {

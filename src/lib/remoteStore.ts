@@ -121,19 +121,16 @@ async function postAction<T>(body: Record<string, unknown>, opts?: { requireNonc
   return json;
 }
 
-export async function remoteLogin(email: string, password: string) {
+export async function remoteLoginInit(email: string, password: string) {
   if (!isRemoteEnabled()) {
     throw new Error('BACKEND indisponível');
   }
-  const resp = await postAction<{ token: string; actor: Record<string, unknown> }>({
+  const resp = await postAction<{ token?: string; otp?: boolean; expiresIn?: number }>({
     action: 'auth_login',
     email,
     password,
   });
-  const token = resp && typeof resp.token === 'string' ? resp.token : undefined;
-  if (!token) throw new Error('Sessão não retornou token');
-  setSession(token);
-  return resp?.actor ?? null;
+  return resp;
 }
 
 export async function remoteLogout() {
@@ -240,4 +237,44 @@ export async function remoteFetchParticipant(code: string): Promise<Record<strin
 
 export function isBackendAvailable() {
   return isRemoteEnabled();
+}
+
+export async function remoteLoginVerify(otpToken: string, otpCode: string) {
+  if (!isRemoteEnabled()) {
+    throw new Error('BACKEND indisponível');
+  }
+  const resp = await postAction<{ token: string; actor: Record<string, unknown> }>({
+    action: 'auth_login_verify',
+    token: otpToken,
+    otp: otpCode,
+  });
+  const session = resp && typeof resp.token === 'string' ? resp.token : undefined;
+  if (!session) throw new Error('Sessão não retornou token');
+  setSession(session);
+  return resp?.actor ?? null;
+}
+
+export async function remoteRequestPasswordReset(email: string, resetBaseUrl: string) {
+  if (!isRemoteEnabled()) return;
+  await postAction(
+    {
+      action: 'auth_password_reset_request',
+      email,
+      resetBaseUrl,
+    },
+    { requireNonce: false },
+  );
+}
+
+export async function remoteConfirmPasswordReset(token: string, otp: string, newPassword: string) {
+  if (!isRemoteEnabled()) return;
+  await postAction(
+    {
+      action: 'auth_password_reset_confirm',
+      token,
+      otp,
+      newPassword,
+    },
+    { requireNonce: false },
+  );
 }

@@ -18,7 +18,7 @@ import {
     listenAllUsers,
     updateUser,
     fetchAllUsers,
-    verifyUserCredentials,
+    verifyCurrentPassword,
     type UserRecord
 } from '../lib/users';
 
@@ -157,7 +157,7 @@ export function CreateUserModal({
         setIsCreating(true);
 
         try {
-            const verified = await verifyUserCredentials(user.email, adminPassword);
+            const verified = await verifyCurrentPassword(user.uid, adminPassword);
             if (!verified) {
                 setLocalError('Senha de administrador inválida');
                 onError('Senha de administrador inválida');
