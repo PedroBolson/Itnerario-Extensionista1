@@ -288,7 +288,7 @@ export function LoginPage() {
             </div>
             <form onSubmit={handleResetSubmit} className="space-y-3">
               <div>
-                <label className="block text-sm font-medium mb-1">Email cadastrado</label>
+                <label className="block text-sm text-theme-primary font-medium mb-1">Email cadastrado</label>
                 <input
                   type="email"
                   value={resetEmail}
