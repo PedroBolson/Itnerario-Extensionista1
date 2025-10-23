@@ -73,3 +73,43 @@ export interface LearningProgress {
   updatedAt: Date;
   completedAt?: Date;
 }
+
+export type ParticipantCustomFieldType =
+  | 'text'
+  | 'textarea'
+  | 'number'
+  | 'cpf'
+  | 'rg'
+  | 'phone'
+  | 'date'
+  | 'email'
+  | 'url';
+
+export type ParticipantCustomFieldConstraints = Record<string, unknown>;
+
+export interface ParticipantCustomField {
+  id: string;
+  label: string;
+  type: ParticipantCustomFieldType;
+  description?: string;
+  constraints: ParticipantCustomFieldConstraints;
+  order: number;
+  isRequired: boolean;
+  isArchived: boolean;
+  createdBy?: string;
+  createdAt: Date;
+  updatedBy?: string;
+  updatedAt: Date;
+}
+
+export interface ParticipantCustomValue {
+  id: string;
+  code: string;
+  fieldId: string;
+  value: string;
+  metadata?: Record<string, unknown> | null;
+  createdBy?: string;
+  createdAt: Date;
+  updatedBy?: string;
+  updatedAt: Date;
+}

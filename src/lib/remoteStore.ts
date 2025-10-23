@@ -239,6 +239,30 @@ export async function remoteFetchParticipant(code: string): Promise<Record<strin
   }
 }
 
+export async function remoteUpsertCustomFields(records: Array<Record<string, unknown>>) {
+  if (!isRemoteEnabled()) return;
+  await remoteUpsertRecords(
+    'participant_custom_schema',
+    records,
+  );
+}
+
+export async function remoteDeleteCustomField(id: string) {
+  await remoteDeleteRecord('participant_custom_schema', id);
+}
+
+export async function remoteUpsertCustomValues(records: Array<Record<string, unknown>>) {
+  if (!isRemoteEnabled()) return;
+  await remoteUpsertRecords(
+    'participant_custom_data',
+    records,
+  );
+}
+
+export async function remoteDeleteCustomValue(id: string) {
+  await remoteDeleteRecord('participant_custom_data', id);
+}
+
 export function isBackendAvailable() {
   return isRemoteEnabled();
 }

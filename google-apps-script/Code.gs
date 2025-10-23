@@ -82,6 +82,40 @@ const SCHEMA = {
       ultimaAtividade: d => dateOrNow(d),
     }
   }
+  ,
+  participant_custom_schema: {
+    key: 'id',
+    headers: ['id','label','tipo','descricao','restricoes','ordem','obrigatorio','criadoPor','criadoEm','atualizadoPor','atualizadoEm','arquivado'],
+    validators: {
+      id: s => str(s, 128),
+      label: s => str(s, 256),
+      tipo: s => str(s, 64),
+      descricao: s => str(s, 512),
+      restricoes: v => jsonText(v, 5000),
+      ordem: n => int(n),
+      obrigatorio: v => bool(v),
+      criadoPor: s => str(s, 128),
+      criadoEm: d => dateOrNow(d),
+      atualizadoPor: s => str(s, 128),
+      atualizadoEm: d => dateOrNow(d),
+      arquivado: v => bool(v),
+    },
+  },
+  participant_custom_data: {
+    key: 'id',
+    headers: ['id','codigo','campoId','valor','metadados','criadoPor','criadoEm','atualizadoPor','atualizadoEm'],
+    validators: {
+      id: s => str(s, 128),
+      codigo: s => str(s, 128),
+      campoId: s => str(s, 128),
+      valor: s => str(s, 4000),
+      metadados: v => jsonText(v, 5000),
+      criadoPor: s => str(s, 128),
+      criadoEm: d => dateOrNow(d),
+      atualizadoPor: s => str(s, 128),
+      atualizadoEm: d => dateOrNow(d),
+    },
+  }
 };
 
 const LEGACY_HEADERS = {
@@ -90,6 +124,8 @@ const LEGACY_HEADERS = {
   contents: ['id','topicId','title','description','order','coverImageUrl','coverImageAlt','difficulty','createdAt','updatedAt'],
   lessons: ['id','contentId','title','youtubeUrl','order','description','createdAt','updatedAt'],
   participants: ['code','displayName','createdAt','lastActiveAt','lessonProgress'],
+  participant_custom_schema: ['id','label','type','description','settings','order','isRequired','createdBy','createdAt','updatedBy','updatedAt','isArchived'],
+  participant_custom_data: ['id','code','fieldId','value','metadata','createdBy','createdAt','updatedBy','updatedAt'],
 };
 
 const FIELD_MAP = {
@@ -145,7 +181,32 @@ const FIELD_MAP = {
     lessonProgress: 'progressoAulas',
     createdAt: 'criadoEm',
     lastActiveAt: 'ultimaAtividade',
-  }
+  },
+  participant_custom_schema: {
+    id: 'id',
+    label: 'label',
+    type: 'tipo',
+    description: 'descricao',
+    constraints: 'restricoes',
+    order: 'ordem',
+    isRequired: 'obrigatorio',
+    createdBy: 'criadoPor',
+    createdAt: 'criadoEm',
+    updatedBy: 'atualizadoPor',
+    updatedAt: 'atualizadoEm',
+    isArchived: 'arquivado',
+  },
+  participant_custom_data: {
+    id: 'id',
+    code: 'codigo',
+    fieldId: 'campoId',
+    value: 'valor',
+    metadata: 'metadados',
+    createdBy: 'criadoPor',
+    createdAt: 'criadoEm',
+    updatedBy: 'atualizadoPor',
+    updatedAt: 'atualizadoEm',
+  },
 };
 
 const FIELD_MAP_REVERSE = Object.keys(FIELD_MAP).reduce((acc, table) => {
@@ -157,6 +218,55 @@ const FIELD_MAP_REVERSE = Object.keys(FIELD_MAP).reduce((acc, table) => {
   acc[table] = rev;
   return acc;
 }, {});
+
+function actorIdentifier(actor){
+  if (!actor) return 'anon';
+  if (actor.uid) return String(actor.uid);
+  if (actor.email) return String(actor.email);
+  return 'anon';
+}
+
+function ensureUuid(value){
+  const trimmed = String(value || '').trim();
+  return trimmed ? trimmed : Utilities.getUuid();
+}
+
+function normalizeCustomSchemaRecord(record, actor, existing){
+  const now = nowStr();
+  const merged = { ...record };
+  merged.id = ensureUuid(merged.id);
+  merged.label = (merged.label || '').toString().trim();
+  merged.type = (merged.type || 'text').toString().trim() || 'text';
+  merged.description = (merged.description || '').toString().trim();
+  merged.constraints = merged.constraints === undefined ? '{}' : merged.constraints;
+  const existingOrder = existing && typeof existing.order === 'number' ? existing.order : 0;
+  merged.order = Number.isFinite(merged.order) ? merged.order : existingOrder;
+  merged.isRequired = Boolean(merged.isRequired);
+  merged.isArchived = Boolean(merged.isArchived);
+  const creator = existing?.createdBy || merged.createdBy || actorIdentifier(actor);
+  const createdAt = existing?.createdAt || merged.createdAt || now;
+  merged.createdBy = creator;
+  merged.createdAt = createdAt;
+  merged.updatedBy = actorIdentifier(actor);
+  merged.updatedAt = now;
+  return merged;
+}
+
+function normalizeCustomDataRecord(record, actor, existing){
+  const now = nowStr();
+  const merged = { ...record };
+  merged.id = ensureUuid(merged.id);
+  merged.code = (merged.code || '').toString().trim();
+  merged.fieldId = (merged.fieldId || '').toString().trim();
+  merged.metadata = merged.metadata === undefined ? '{}' : merged.metadata;
+  const creator = existing?.createdBy || merged.createdBy || actorIdentifier(actor);
+  const createdAt = existing?.createdAt || merged.createdAt || now;
+  merged.createdBy = creator;
+  merged.createdAt = createdAt;
+  merged.updatedBy = actorIdentifier(actor);
+  merged.updatedAt = now;
+  return merged;
+}
 
 function toSheetKey(table, clientKey){
   const map = FIELD_MAP[table] || {};
@@ -782,6 +892,14 @@ function authorizeWrite(e, body){
     return { ok:true, actor: actor || null };
   }
 
+  if (table === 'participant_custom_schema' || table === 'participant_custom_data') {
+    if (!actor) return { ok:false, error:'unauthenticated' };
+    if (action === 'delete' && actor.role !== 'admin') {
+      return { ok:false, error:'forbidden_custom_delete_admin_only' };
+    }
+    return { ok:true, actor };
+  }
+
   return { ok:false, error:'rule_not_defined' };
 }
 
@@ -817,6 +935,16 @@ function handleCreate(body, e){
   if (table === 'participants') {
     if (!clientRecord.createdAt) clientRecord.createdAt = nowStr();
     if (!clientRecord.lastActiveAt) clientRecord.lastActiveAt = clientRecord.createdAt;
+  }
+
+  if (table === 'participant_custom_schema') {
+    clientRecord = normalizeCustomSchemaRecord(clientRecord, auth.actor, null);
+  }
+
+  if (table === 'participant_custom_data') {
+    clientRecord = normalizeCustomDataRecord(clientRecord, auth.actor, null);
+    if (!clientRecord.code) return buildResponse({ ok:false, error:'missing_participant_code' }, 400);
+    if (!clientRecord.fieldId) return buildResponse({ ok:false, error:'missing_field_id' }, 400);
   }
 
   validated = toSheetRecord(table, clientRecord);
@@ -879,7 +1007,17 @@ function handleUpsert(body, e){
       if (!mergedClient.lastActiveAt) mergedClient.lastActiveAt = mergedClient.createdAt;
     }
 
-    let mergedSheet = validateRecord(table, toSheetRecord(table, mergedClient));
+    let mergedNormalized = mergedClient;
+    if (table === 'participant_custom_schema') {
+      mergedNormalized = normalizeCustomSchemaRecord(mergedClient, auth.actor, currentClient);
+    }
+    if (table === 'participant_custom_data') {
+      mergedNormalized = normalizeCustomDataRecord(mergedClient, auth.actor, currentClient);
+      if (!mergedNormalized.code) return buildResponse({ ok:false, error:'missing_participant_code' }, 400);
+      if (!mergedNormalized.fieldId) return buildResponse({ ok:false, error:'missing_field_id' }, 400);
+    }
+
+    let mergedSheet = validateRecord(table, toSheetRecord(table, mergedNormalized));
     const updatedKey = toSheetKey(table, 'updatedAt');
     if (headers.includes(updatedKey)) mergedSheet[updatedKey] = nowStr();
     writeRow(sheet, headers, idx, mergedSheet);
@@ -890,8 +1028,18 @@ function handleUpsert(body, e){
     if (headers.includes(createdKey) && !validated[createdKey]) validated[createdKey] = nowStr();
     const updatedKey = toSheetKey(table, 'updatedAt');
     if (headers.includes(updatedKey)) validated[updatedKey] = nowStr();
-    appendRow(sheet, headers, validated);
-    const responseRecord = fromSheetRecord(table, validated);
+    let newClient = clientRecord;
+    if (table === 'participant_custom_schema') {
+      newClient = normalizeCustomSchemaRecord(newClient, auth.actor, null);
+    }
+    if (table === 'participant_custom_data') {
+      newClient = normalizeCustomDataRecord(newClient, auth.actor, null);
+      if (!newClient.code) return buildResponse({ ok:false, error:'missing_participant_code' }, 400);
+      if (!newClient.fieldId) return buildResponse({ ok:false, error:'missing_field_id' }, 400);
+    }
+    const newSheetRecord = validateRecord(table, toSheetRecord(table, newClient));
+    appendRow(sheet, headers, newSheetRecord);
+    const responseRecord = fromSheetRecord(table, newSheetRecord);
     return buildResponse({ ok:true, upsert:'created', data: table==='users'? sanitizeUser(responseRecord): responseRecord }, 201);
   }
 }
@@ -934,7 +1082,17 @@ function handleUpdate(body, e){
     }
   }
 
-  let mergedSheet = validateRecord(table, toSheetRecord(table, mergedClient));
+  let normalizedClient = mergedClient;
+  if (table === 'participant_custom_schema') {
+    normalizedClient = normalizeCustomSchemaRecord(mergedClient, auth.actor, currentClient);
+  }
+  if (table === 'participant_custom_data') {
+    normalizedClient = normalizeCustomDataRecord(mergedClient, auth.actor, currentClient);
+    if (!normalizedClient.code) return buildResponse({ ok:false, error:'missing_participant_code' }, 400);
+    if (!normalizedClient.fieldId) return buildResponse({ ok:false, error:'missing_field_id' }, 400);
+  }
+
+  let mergedSheet = validateRecord(table, toSheetRecord(table, normalizedClient));
   const updatedKey = toSheetKey(table, 'updatedAt');
   if (headers.includes(updatedKey)) mergedSheet[updatedKey] = nowStr();
   writeRow(sheet, headers, idx, mergedSheet);
@@ -981,8 +1139,8 @@ function handleBatchUpsert(body, e){
   const { sheet, headers } = getSheetAndHeaders(table);
   let created = 0, updated = 0;
 
-  records.forEach(r => {
-    const clientRecRaw = { ...(r || {}) };
+  records.forEach(rawRecord => {
+    const clientRecRaw = { ...(rawRecord || {}) };
 
     if (table === 'users' && clientRecRaw.password) {
       clientRecRaw.passwordHash = encodeHash(String(clientRecRaw.password));
@@ -994,15 +1152,19 @@ function handleBatchUpsert(body, e){
       if (!clientRecRaw.lastActiveAt) clientRecRaw.lastActiveAt = clientRecRaw.createdAt;
     }
 
-    let rec = validateRecord(table, toSheetRecord(table, clientRecRaw));
-    const id = rec[schema.key];
+    if ((table === 'participant_custom_schema' || table === 'participant_custom_data') && !clientRecRaw.id) {
+      clientRecRaw.id = Utilities.getUuid();
+    }
+
+    const provisional = validateRecord(table, toSheetRecord(table, clientRecRaw));
+    const id = provisional[schema.key];
     if (!id) return;
 
     const idx = findRowByKey(sheet, headers, schema.key, id);
     if (idx > 0) {
       const currentSheet = getRowObject(sheet, headers, idx);
       const currentClient = fromSheetRecord(table, currentSheet);
-      const mergedClient = { ...currentClient, ...clientRecRaw };
+      let mergedClient = { ...currentClient, ...clientRecRaw };
 
       if (table === 'users') {
         if (mergedClient.role !== 'admin') mergedClient.role = 'user';
@@ -1014,17 +1176,37 @@ function handleBatchUpsert(body, e){
         if (!mergedClient.lastActiveAt) mergedClient.lastActiveAt = mergedClient.createdAt;
       }
 
-      let mergedSheet = validateRecord(table, toSheetRecord(table, mergedClient));
+      if (table === 'participant_custom_schema') {
+        mergedClient = normalizeCustomSchemaRecord(mergedClient, auth.actor, currentClient);
+      }
+
+      if (table === 'participant_custom_data') {
+        mergedClient = normalizeCustomDataRecord(mergedClient, auth.actor, currentClient);
+        if (!mergedClient.code) throw new Error('missing_participant_code');
+        if (!mergedClient.fieldId) throw new Error('missing_field_id');
+      }
+
+      const mergedSheet = validateRecord(table, toSheetRecord(table, mergedClient));
       const updatedKey = toSheetKey(table, 'updatedAt');
       if (headers.includes(updatedKey)) mergedSheet[updatedKey] = nowStr();
       writeRow(sheet, headers, idx, mergedSheet);
       updated++;
     } else {
+      let newClient = clientRecRaw;
+      if (table === 'participant_custom_schema') {
+        newClient = normalizeCustomSchemaRecord(newClient, auth.actor, null);
+      }
+      if (table === 'participant_custom_data') {
+        newClient = normalizeCustomDataRecord(newClient, auth.actor, null);
+        if (!newClient.code) throw new Error('missing_participant_code');
+        if (!newClient.fieldId) throw new Error('missing_field_id');
+      }
+      let newSheet = validateRecord(table, toSheetRecord(table, newClient));
       const createdKey = toSheetKey(table, 'createdAt');
-      if (headers.includes(createdKey) && !rec[createdKey]) rec[createdKey] = nowStr();
+      if (headers.includes(createdKey) && !newSheet[createdKey]) newSheet[createdKey] = nowStr();
       const updatedKey = toSheetKey(table, 'updatedAt');
-      if (headers.includes(updatedKey)) rec[updatedKey] = nowStr();
-      appendRow(sheet, headers, rec);
+      if (headers.includes(updatedKey)) newSheet[updatedKey] = nowStr();
+      appendRow(sheet, headers, newSheet);
       created++;
     }
   });

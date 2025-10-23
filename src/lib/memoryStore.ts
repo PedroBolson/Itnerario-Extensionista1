@@ -5,6 +5,8 @@ import type {
   LearningProgress,
   Lesson,
   ParticipantRecord,
+  ParticipantCustomField,
+  ParticipantCustomValue,
   Topic,
   UserRecord,
   UserRole,
@@ -61,6 +63,31 @@ export type DataStoreDump = {
       completedAt?: string;
     }>;
   }>;
+  participantCustomFields: Array<{
+    id: string;
+    label: string;
+    type: string;
+    description?: string;
+    constraints?: unknown;
+    order?: number | string;
+    isRequired?: boolean | string;
+    isArchived?: boolean | string;
+    createdBy?: string;
+    createdAt?: string;
+    updatedBy?: string;
+    updatedAt?: string;
+  }>;
+  participantCustomValues: Array<{
+    id: string;
+    code: string;
+    fieldId: string;
+    value: string;
+    metadata?: unknown;
+    createdBy?: string;
+    createdAt?: string;
+    updatedBy?: string;
+    updatedAt?: string;
+  }>;
 };
 
 type TopicsListener = (items: Topic[]) => void;
@@ -78,6 +105,8 @@ export type DataStore = {
   contents: Content[];
   lessons: Lesson[];
   participants: ParticipantState[];
+  participantCustomFields: ParticipantCustomField[];
+  participantCustomValues: ParticipantCustomValue[];
 };
 
 type InternalStore = DataStore;
@@ -94,6 +123,8 @@ const store: InternalStore =
     contents: [],
     lessons: [],
     participants: [],
+    participantCustomFields: [],
+    participantCustomValues: [],
   };
 
 if (typeof window !== 'undefined') {
@@ -108,6 +139,10 @@ const lessonListeners = new Map<string, Set<LessonsListener>>();
 const userListeners = new Set<UsersListener>();
 const participantListeners = new Map<string, Set<ParticipantListener>>();
 const progressListeners = new Map<string, Set<ProgressListener>>();
+type CustomFieldListener = (fields: ParticipantCustomField[]) => void;
+type CustomValueListener = (values: ParticipantCustomValue[]) => void;
+const customFieldListeners = new Set<CustomFieldListener>();
+const customValueListeners = new Map<string, Set<CustomValueListener>>();
 
 function cloneTopics() {
   return store.topics.map((topic) => ({ ...topic }));
@@ -119,6 +154,25 @@ function cloneContents() {
 
 function cloneLessons() {
   return store.lessons.map((lesson) => ({ ...lesson }));
+}
+
+function cloneCustomFields() {
+  return store.participantCustomFields
+    .map((field) => ({
+      ...field,
+      constraints: field.constraints ? { ...field.constraints } : {},
+    }))
+    .sort((a, b) => a.order - b.order || a.label.localeCompare(b.label));
+}
+
+function cloneCustomValues(code: string) {
+  const normalized = code.toUpperCase();
+  return store.participantCustomValues
+    .filter((entry) => entry.code === normalized)
+    .map((entry) => ({
+      ...entry,
+      metadata: entry.metadata ? { ...entry.metadata } : undefined,
+    }));
 }
 
 function cloneUsers() {
@@ -189,6 +243,16 @@ function emitProgress(code: string) {
   const participant = store.participants.find((item) => item.code === code);
   const payload = participant ? cloneProgressList(participant) : [];
   progressListeners.get(code)?.forEach((listener) => listener(payload));
+}
+
+function emitCustomFields() {
+  const snapshot = cloneCustomFields();
+  customFieldListeners.forEach((listener) => listener(snapshot));
+}
+
+function emitCustomValues(code: string) {
+  const snapshot = cloneCustomValues(code);
+  customValueListeners.get(code)?.forEach((listener) => listener(snapshot));
 }
 
 function ensureId() {
@@ -613,6 +677,103 @@ export function getLessonProgress(code: string, lessonId: string) {
   return entry ? { ...entry } : null;
 }
 
+export function listParticipantCustomFields(): ParticipantCustomField[] {
+  return cloneCustomFields();
+}
+
+export function subscribeParticipantCustomFields(listener: CustomFieldListener) {
+  customFieldListeners.add(listener);
+  listener(cloneCustomFields());
+  return () => {
+    customFieldListeners.delete(listener);
+  };
+}
+
+export function upsertParticipantCustomField(field: ParticipantCustomField) {
+  const index = store.participantCustomFields.findIndex((item) => item.id === field.id);
+  if (index >= 0) {
+    store.participantCustomFields[index] = {
+      ...store.participantCustomFields[index],
+      ...field,
+    };
+  } else {
+    store.participantCustomFields.push({ ...field });
+  }
+  store.participantCustomFields.sort((a, b) => a.order - b.order || a.label.localeCompare(b.label));
+  emitCustomFields();
+}
+
+export function bulkUpdateParticipantCustomFieldOrder(entries: Array<{ id: string; order: number }>) {
+  const orderMap = new Map(entries.map((item) => [item.id, item.order]));
+  store.participantCustomFields = store.participantCustomFields.map((field) => {
+    const nextOrder = orderMap.get(field.id);
+    return nextOrder === undefined ? field : { ...field, order: nextOrder };
+  });
+  store.participantCustomFields.sort((a, b) => a.order - b.order || a.label.localeCompare(b.label));
+  emitCustomFields();
+}
+
+export function removeParticipantCustomField(id: string) {
+  const index = store.participantCustomFields.findIndex((field) => field.id === id);
+  if (index === -1) return;
+  store.participantCustomFields.splice(index, 1);
+  emitCustomFields();
+}
+
+export function listParticipantCustomValues(code: string): ParticipantCustomValue[] {
+  return cloneCustomValues(code);
+}
+
+export function subscribeParticipantCustomValues(code: string, listener: CustomValueListener) {
+  const key = code.toUpperCase();
+  let bucket = customValueListeners.get(key);
+  if (!bucket) {
+    bucket = new Set();
+    customValueListeners.set(key, bucket);
+  }
+  bucket.add(listener);
+  listener(cloneCustomValues(key));
+  return () => {
+    bucket?.delete(listener);
+    if (bucket && bucket.size === 0) {
+      customValueListeners.delete(key);
+    }
+  };
+}
+
+export function upsertParticipantCustomValue(value: ParticipantCustomValue) {
+  const normalizedCode = value.code.toUpperCase();
+  const index = store.participantCustomValues.findIndex((entry) => entry.id === value.id);
+  if (index >= 0) {
+    store.participantCustomValues[index] = {
+      ...store.participantCustomValues[index],
+      ...value,
+      code: normalizedCode,
+    };
+  } else {
+    store.participantCustomValues.push({ ...value, code: normalizedCode });
+  }
+  emitCustomValues(normalizedCode);
+}
+
+export function removeParticipantCustomValue(id: string) {
+  const index = store.participantCustomValues.findIndex((entry) => entry.id === id);
+  if (index === -1) return;
+  const [removed] = store.participantCustomValues.splice(index, 1);
+  if (removed) {
+    emitCustomValues(removed.code.toUpperCase());
+  }
+}
+
+export function findParticipantCustomValueById(id: string): ParticipantCustomValue | null {
+  const entry = store.participantCustomValues.find((item) => item.id === id);
+  if (!entry) return null;
+  return {
+    ...entry,
+    metadata: entry.metadata ? { ...entry.metadata } : undefined,
+  };
+}
+
 export function exportStore(): DataStoreDump {
   return {
     version: STORE_VERSION,
@@ -664,6 +825,31 @@ export function exportStore(): DataStoreDump {
         ]),
       ),
     })),
+    participantCustomFields: store.participantCustomFields.map((field) => ({
+      id: field.id,
+      label: field.label,
+      type: field.type,
+      description: field.description,
+      constraints: field.constraints,
+      order: field.order,
+      isRequired: field.isRequired,
+      isArchived: field.isArchived,
+      createdBy: field.createdBy,
+      createdAt: field.createdAt.toISOString(),
+      updatedBy: field.updatedBy,
+      updatedAt: field.updatedAt.toISOString(),
+    })),
+    participantCustomValues: store.participantCustomValues.map((entry) => ({
+      id: entry.id,
+      code: entry.code,
+      fieldId: entry.fieldId,
+      value: entry.value,
+      metadata: entry.metadata,
+      createdBy: entry.createdBy,
+      createdAt: entry.createdAt.toISOString(),
+      updatedBy: entry.updatedBy,
+      updatedAt: entry.updatedAt.toISOString(),
+    })),
   };
 }
 
@@ -671,6 +857,32 @@ export function importStore(dump: DataStoreDump) {
   if (!dump || typeof dump !== 'object') {
     throw new Error('Arquivo inválido');
   }
+
+  const toBoolean = (value: unknown) => {
+    if (typeof value === 'boolean') return value;
+    if (typeof value === 'number') return value !== 0;
+    if (typeof value === 'string') {
+      const normalized = value.trim().toLowerCase();
+      return normalized === 'true' || normalized === '1' || normalized === 'yes';
+    }
+    return false;
+  };
+
+  const parseJson = (value: unknown): Record<string, unknown> => {
+    if (value == null) return {};
+    if (typeof value === 'object') return { ...(value as Record<string, unknown>) };
+    if (typeof value === 'string') {
+      const trimmed = value.trim();
+      if (!trimmed) return {};
+      try {
+        const parsed = JSON.parse(trimmed);
+        if (parsed && typeof parsed === 'object') return parsed as Record<string, unknown>;
+      } catch {
+        return {};
+      }
+    }
+    return {};
+  };
 
   store.users = dump.users.map((user) => ({
     ...user,
@@ -736,6 +948,46 @@ export function importStore(dump: DataStoreDump) {
     return base;
   });
 
+  const allowedFieldTypes: ParticipantCustomField['type'][] = ['text', 'textarea', 'number', 'cpf', 'rg', 'phone', 'date', 'email', 'url'];
+
+  store.participantCustomFields = (dump.participantCustomFields ?? []).map((field) => {
+    const rawType = typeof field.type === 'string' ? field.type.toLowerCase().trim() : 'text';
+    const normalizedType = allowedFieldTypes.includes(rawType as ParticipantCustomField['type'])
+      ? (rawType as ParticipantCustomField['type'])
+      : 'text';
+    return {
+      id: field.id,
+      label: field.label ?? '',
+      type: normalizedType,
+      description: field.description ?? '',
+      constraints: parseJson(field.constraints),
+      order: (() => {
+        const numeric = Number(field.order);
+        return Number.isFinite(numeric) ? numeric : 0;
+    })(),
+    isRequired: toBoolean(field.isRequired),
+    isArchived: toBoolean(field.isArchived),
+      createdBy: field.createdBy ?? undefined,
+      createdAt: field.createdAt ? new Date(field.createdAt) : new Date(),
+      updatedBy: field.updatedBy ?? undefined,
+      updatedAt: field.updatedAt ? new Date(field.updatedAt) : new Date(),
+    };
+  });
+
+  store.participantCustomValues = (dump.participantCustomValues ?? []).map((entry) => ({
+    id: entry.id,
+    code: entry.code,
+    fieldId: entry.fieldId,
+    value: entry.value,
+    metadata: parseJson(entry.metadata),
+    createdBy: entry.createdBy ?? undefined,
+    createdAt: entry.createdAt ? new Date(entry.createdAt) : new Date(),
+    updatedBy: entry.updatedBy ?? undefined,
+    updatedAt: entry.updatedAt ? new Date(entry.updatedAt) : new Date(),
+  }));
+
+  store.participantCustomFields.sort((a, b) => a.order - b.order || a.label.localeCompare(b.label));
+
   emitTopics();
   store.contents.forEach((content) => emitContents(content.topicId));
   store.lessons.forEach((lesson) => emitLessons(lesson.contentId));
@@ -744,4 +996,7 @@ export function importStore(dump: DataStoreDump) {
     emitParticipant(participant.code);
     emitProgress(participant.code);
   });
+  emitCustomFields();
+  const codes = new Set(store.participantCustomValues.map((entry) => entry.code));
+  codes.forEach((code) => emitCustomValues(code));
 }

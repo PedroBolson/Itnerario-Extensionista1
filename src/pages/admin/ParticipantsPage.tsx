@@ -13,6 +13,7 @@ import {
   Trash2,
   Plus,
   X,
+  NotebookPen,
 } from 'lucide-react';
 
 import {
@@ -26,6 +27,7 @@ import {
 import type { LearningProgress } from '../../lib/progress';
 import { useAuth } from '../../hooks/useAuth';
 import { SelectField } from '../../components/SelectField';
+import { ParticipantNotebookModal } from '../../components/participants/ParticipantNotebookModal';
 
 interface ParticipantSummary {
   id: string;
@@ -78,6 +80,7 @@ export function ParticipantsPage() {
   const [formLoading, setFormLoading] = useState(false);
   const [selectedCode, setSelectedCode] = useState<string | null>(null);
   const [deletingCode, setDeletingCode] = useState<string | null>(null);
+  const [notebookParticipant, setNotebookParticipant] = useState<ParticipantSummary | null>(null);
 
   const loadParticipants = useCallback(async () => {
     setIsLoading(true);
@@ -103,6 +106,12 @@ export function ParticipantsPage() {
     } catch (error) {
       console.error('Erro ao copiar código:', error);
     }
+  };
+  const openNotebook = (participant: ParticipantSummary) => {
+    setNotebookParticipant(participant);
+  };
+  const closeNotebook = () => {
+    setNotebookParticipant(null);
   };
 
   const filtered = useMemo(() => {
@@ -374,6 +383,13 @@ export function ParticipantsPage() {
                             Editar
                           </button>
                           <button
+                            onClick={() => openNotebook(participant)}
+                            className="w-full sm:w-auto px-3 py-2 rounded-lg border border-blue-500 text-sm flex items-center justify-center gap-2 text-blue-500 hover:bg-blue-500/10 transition-colors"
+                          >
+                            <NotebookPen size={16} />
+                            Ficha
+                          </button>
+                          <button
                             onClick={() => handleDelete(participant.id)}
                             disabled={!isAdmin || deletingCode === participant.id}
                             className="w-full sm:w-auto px-3 py-2 rounded-lg border border-theme text-sm flex items-center justify-center gap-2 hover:bg-theme-surface-hover transition-colors disabled:opacity-40"
@@ -489,6 +505,15 @@ export function ParticipantsPage() {
           </motion.div>
         )}
       </AnimatePresence>
+      <ParticipantNotebookModal
+        isOpen={Boolean(notebookParticipant)}
+        participant={
+          notebookParticipant
+            ? { code: notebookParticipant.id, displayName: notebookParticipant.displayName }
+            : null
+        }
+        onClose={closeNotebook}
+      />
     </div>
   );
 }

@@ -5,7 +5,14 @@ import {
   type DataStore,
   type DataStoreDump,
 } from './memoryStore';
-import type { Content, Lesson, Topic, UserRole } from './types';
+import type {
+  Content,
+  Lesson,
+  ParticipantCustomField,
+  ParticipantCustomValue,
+  Topic,
+  UserRole,
+} from './types';
 import { setLoading } from './loadingStore';
 import { getCachedData, setCachedData } from './cache';
 
@@ -15,6 +22,8 @@ type Snapshot = {
   contents?: Array<Record<string, unknown>>;
   lessons?: Array<Record<string, unknown>>;
   participants?: Array<Record<string, unknown>>;
+  participant_custom_schema?: Array<Record<string, unknown>>;
+  participant_custom_data?: Array<Record<string, unknown>>;
 };
 
 function toDate(value: unknown): Date | undefined {
@@ -130,6 +139,78 @@ function normalizeParticipants(rows: Array<Record<string, unknown>> = []) {
     }));
 }
 
+function coerceBoolean(value: unknown) {
+  if (typeof value === 'boolean') return value;
+  if (typeof value === 'number') return value !== 0;
+  if (typeof value === 'string') {
+    const normalized = value.trim().toLowerCase();
+    return normalized === 'true' || normalized === '1' || normalized === 'yes';
+  }
+  return false;
+}
+
+function parseJsonObject(value: unknown): Record<string, unknown> {
+  if (!value) return {};
+  if (typeof value === 'object') {
+    return { ...(value as Record<string, unknown>) };
+  }
+  if (typeof value === 'string') {
+    const trimmed = value.trim();
+    if (!trimmed) return {};
+    try {
+      const parsed = JSON.parse(trimmed);
+      if (parsed && typeof parsed === 'object') {
+        return parsed as Record<string, unknown>;
+      }
+    } catch {
+      return {};
+    }
+  }
+  return {};
+}
+
+function normalizeCustomFields(rows: Array<Record<string, unknown>> = []): ParticipantCustomField[] {
+  const allowed: ParticipantCustomField['type'][] = ['text', 'textarea', 'number', 'cpf', 'rg', 'phone', 'date', 'email', 'url'];
+  return rows
+    .filter(row => row.id && String(row.id).trim() !== '')
+    .map((row) => {
+      const rawType = typeof row.type === 'string' ? row.type.toLowerCase().trim() : 'text';
+      const type = allowed.includes(rawType as ParticipantCustomField['type'])
+        ? (rawType as ParticipantCustomField['type'])
+        : 'text';
+      return {
+        id: String(row.id ?? ''),
+        label: String(row.label ?? ''),
+        type,
+        description: row.description ? String(row.description) : undefined,
+        constraints: parseJsonObject(row.constraints),
+        order: typeof row.order === 'number' ? row.order : Number(row.order ?? 0),
+        isRequired: coerceBoolean(row.isRequired),
+        isArchived: coerceBoolean(row.isArchived),
+        createdBy: row.createdBy ? String(row.createdBy) : undefined,
+        createdAt: toDate(row.createdAt) ?? new Date(),
+        updatedBy: row.updatedBy ? String(row.updatedBy) : undefined,
+        updatedAt: toDate(row.updatedAt) ?? new Date(),
+      };
+    });
+}
+
+function normalizeCustomValues(rows: Array<Record<string, unknown>> = []): ParticipantCustomValue[] {
+  return rows
+    .filter(row => row.id && row.code && row.fieldId)
+    .map((row) => ({
+      id: String(row.id ?? ''),
+      code: String(row.code ?? '').toUpperCase(),
+      fieldId: String(row.fieldId ?? ''),
+      value: row.value != null ? String(row.value) : '',
+      metadata: parseJsonObject(row.metadata),
+      createdBy: row.createdBy ? String(row.createdBy) : undefined,
+      createdAt: toDate(row.createdAt) ?? new Date(),
+      updatedBy: row.updatedBy ? String(row.updatedBy) : undefined,
+      updatedAt: toDate(row.updatedAt) ?? new Date(),
+    }));
+}
+
 export async function hydrateFromRemote() {
   if (!isBackendAvailable()) {
     setLoading(false);
@@ -145,6 +226,8 @@ export async function hydrateFromRemote() {
       contents: normalizeContents(cached.contents as Array<Record<string, unknown>>),
       lessons: normalizeLessons(cached.lessons as Array<Record<string, unknown>>),
       participants: [], // SEMPRE buscar do servidor (progresso de aulas)
+      participantCustomFields: [],
+      participantCustomValues: [],
     };
 
     const cachedDump: DataStoreDump = {
@@ -166,6 +249,8 @@ export async function hydrateFromRemote() {
         updatedAt: lesson.updatedAt ? lesson.updatedAt.toISOString() : undefined,
       })),
       participants: [],
+      participantCustomFields: [],
+      participantCustomValues: [],
     };
 
     importStore(cachedDump);
@@ -206,6 +291,8 @@ async function fetchAndUpdateData() {
       contents: normalizeContents(snapshot.contents),
       lessons: normalizeLessons(snapshot.lessons),
       participants: normalizeParticipants(snapshot.participants),
+      participantCustomFields: normalizeCustomFields(snapshot.participant_custom_schema),
+      participantCustomValues: normalizeCustomValues(snapshot.participant_custom_data),
     };
 
     const dump: DataStoreDump = {
@@ -258,6 +345,31 @@ async function fetchAndUpdateData() {
             return [lessonId, { ...entry, updatedAt, completedAt }];
           }),
         ),
+      })),
+      participantCustomFields: data.participantCustomFields.map((field) => ({
+        id: field.id,
+        label: field.label,
+        type: field.type,
+        description: field.description,
+        constraints: field.constraints,
+        order: field.order,
+        isRequired: field.isRequired,
+        isArchived: field.isArchived,
+        createdBy: field.createdBy,
+        createdAt: field.createdAt?.toISOString(),
+        updatedBy: field.updatedBy,
+        updatedAt: field.updatedAt?.toISOString(),
+      })),
+      participantCustomValues: data.participantCustomValues.map((entry) => ({
+        id: entry.id,
+        code: entry.code,
+        fieldId: entry.fieldId,
+        value: entry.value,
+        metadata: entry.metadata,
+        createdBy: entry.createdBy,
+        createdAt: entry.createdAt?.toISOString(),
+        updatedBy: entry.updatedBy,
+        updatedAt: entry.updatedAt?.toISOString(),
       })),
     };
 
