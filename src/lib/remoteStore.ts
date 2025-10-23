@@ -172,16 +172,20 @@ export async function remoteUpsertRecords(table: string, records: Array<unknown>
   );
 }
 
-export async function remoteCreateRecord(table: string, record: unknown) {
+export async function remoteCreateRecord(
+  table: string,
+  record: unknown,
+  options?: { otpToken?: string; otpCode?: string },
+) {
   if (!isRemoteEnabled()) return;
-  await postAction(
-    {
-      action: 'create',
-      table,
-      record,
-    },
-    { requireNonce: true },
-  );
+  const payload: Record<string, unknown> = {
+    action: 'create',
+    table,
+    record,
+  };
+  if (options?.otpToken) payload.otpToken = options.otpToken;
+  if (options?.otpCode) payload.otpCode = options.otpCode;
+  await postAction(payload, { requireNonce: true });
 }
 
 export async function remoteUpdateRecord(
@@ -277,4 +281,31 @@ export async function remoteConfirmPasswordReset(token: string, otp: string, new
     },
     { requireNonce: false },
   );
+}
+
+export async function remoteVerifyPassword(password: string) {
+  if (!isRemoteEnabled()) {
+    throw new Error('BACKEND indisponível');
+  }
+  await postAction({
+    action: 'auth_verify_password',
+    password,
+  });
+}
+
+export async function remoteRequestAdminOtp(purpose: string) {
+  if (!isRemoteEnabled()) {
+    throw new Error('BACKEND indisponível');
+  }
+  const resp = await postAction<{ token?: string; expiresIn?: number }>(
+    {
+      action: 'auth_admin_otp_request',
+      purpose,
+    },
+  );
+  const data = resp as Record<string, unknown>;
+  return {
+    token: String(data.token || ''),
+    expiresIn: Number(data.expiresIn || 300),
+  };
 }

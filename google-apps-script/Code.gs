@@ -289,8 +289,10 @@ function doPost(e){
   if (action === 'auth_login_verify') return handleAuthLoginVerify(body);
   if (action === 'auth_logout')  return handleAuthLogout(body);
   if (action === 'auth_change_password') return handleAuthChangePassword(body, e);
+  if (action === 'auth_verify_password') return handleAuthVerifyPassword(body, e);
   if (action === 'auth_password_reset_request') return handleAuthPasswordResetRequest(body, e);
   if (action === 'auth_password_reset_confirm') return handleAuthPasswordResetConfirm(body, e);
+  if (action === 'auth_admin_otp_request') return handleAdminOtpRequest(body, e);
 
   // Nonce (reforço para escrita)
   const table = body.table;
@@ -472,6 +474,18 @@ function handleAuthChangePassword(body, e){
   return buildResponse({ ok:true }, 200);
 }
 
+function handleAuthVerifyPassword(body, e){
+  const actor = getActorFromRequest(e, body);
+  if (!actor) return buildResponse({ ok:false, error:'unauthenticated' }, 401);
+  const password = String(body.password || '');
+  if (!password) return buildResponse({ ok:false, error:'missing_password' }, 400);
+  const user = getById('users', actor.uid);
+  if (!user || !verifyHash(password, user.passwordHash)) {
+    return buildResponse({ ok:false, error:'invalid_password' }, 401);
+  }
+  return buildResponse({ ok:true }, 200);
+}
+
 function handleAuthPasswordResetRequest(body){
   const email = String(body.email || '').trim().toLowerCase();
   const baseUrlRaw = String(body.resetBaseUrl || '').trim();
@@ -560,6 +574,62 @@ function handleAuthPasswordResetConfirm(body){
   return buildResponse({ ok:true }, 200);
 }
 
+function handleAdminOtpRequest(body, e){
+  const actor = getActorFromRequest(e, body);
+  if (!actor) return buildResponse({ ok:false, error:'unauthenticated' }, 401);
+  if (actor.role !== 'admin') return buildResponse({ ok:false, error:'forbidden' }, 403);
+  const purpose = String(body.purpose || '').trim() || 'generic';
+  const throttleKey = 'otp-admin:'+actor.uid+':'+purpose;
+  if (hitLimit(throttleKey, 10)) return buildResponse({ ok:false, error:'otp_rate_limited' }, 429);
+  const code = generateOtpCode();
+  const token = Utilities.getUuid();
+  const salt = Utilities.getUuid().slice(0, 8);
+  const expiresAt = Date.now() + ADMIN_OTP_TTL_SEC * 1000;
+  persistOtpRecord('admin:'+purpose+':', token, {
+    uid: actor.uid,
+    email: actor.email,
+    purpose,
+    salt,
+    codeHash: hashOtp(code, salt),
+    attempts: 0,
+    expiresAt,
+  });
+  sendEmail({
+    to: actor.email,
+    subject: 'Confirmação de ação - Itinerário Extensionista',
+    htmlBody: adminOtpEmailHtml(code, purpose),
+    textBody: 'Código para confirmar a ação "'+purpose+'": '+code+'\nVálido por 5 minutos.',
+  });
+  return buildResponse({ ok:true, token, expiresIn: ADMIN_OTP_TTL_SEC }, 200);
+}
+
+function ensureAdminOtp(actor, token, code, purpose){
+  if (!actor) return { ok:false, error:'unauthenticated', status:401 };
+  const cacheKey = 'admin:'+purpose+':';
+  const record = otpRecord(cacheKey, token);
+  if (!record) return { ok:false, error:'otp_expired', status:400 };
+  if (String(record.uid) !== String(actor.uid)) {
+    clearOtpRecord(cacheKey, token);
+    return { ok:false, error:'otp_actor_mismatch', status:403 };
+  }
+  if (record.expiresAt && Date.now() > record.expiresAt) {
+    clearOtpRecord(cacheKey, token);
+    return { ok:false, error:'otp_expired', status:400 };
+  }
+  const expected = hashOtp(code, record.salt || '');
+  if (expected !== record.codeHash) {
+    record.attempts = (record.attempts || 0) + 1;
+    if (record.attempts >= OTP_MAX_ATTEMPTS) {
+      clearOtpRecord(cacheKey, token);
+      return { ok:false, error:'otp_max_attempts', status:403 };
+    }
+    persistOtpRecord(cacheKey, token, record);
+    return { ok:false, error:'invalid_otp', status:400 };
+  }
+  clearOtpRecord(cacheKey, token);
+  return { ok:true };
+}
+
 // hashing simples (HMAC-SHA256 com salt aleatório)
 function makeSalt(){ return Utilities.base64Encode(Utilities.getUuid().slice(0,16)); }
 function hmac(password, saltB64){
@@ -587,6 +657,7 @@ function findUserByEmail(email){
 
 const OTP_TTL_SEC = 5 * 60; // 5 minutos
 const RESET_TTL_SEC = 10 * 60; // 10 minutos
+const ADMIN_OTP_TTL_SEC = 5 * 60;
 const OTP_MAX_ATTEMPTS = 5;
 
 function otpCache(){ return CacheService.getScriptCache(); }
@@ -645,6 +716,17 @@ function resetOtpEmailHtml(code, link){
     + '<p style="font-size:28px;font-weight:700;letter-spacing:4px;margin:16px 0;color:#1d4ed8">'+code+'</p>'
     + cleanLink
     + '<p style="font-size:12px;color:#475569">O código expira em 10 minutos. Se você não solicitou, ignore este e-mail.</p>'
+    + '</div>';
+}
+
+function adminOtpEmailHtml(code, purpose){
+  var purposeText = 'ação administrativa';
+  if (purpose === 'create_user') purposeText = 'criar um novo usuário';
+  return '<div style="font-family:Arial,Helvetica,sans-serif;line-height:1.6;color:#0f172a">'
+    + '<h2 style="margin:0 0 16px;font-size:20px;color:#1d4ed8">Confirme esta ação</h2>'
+    + '<p>Código para '+purposeText+':</p>'
+    + '<p style="font-size:28px;font-weight:700;letter-spacing:4px;margin:16px 0;color:#1d4ed8">'+code+'</p>'
+    + '<p style="font-size:12px;color:#475569">O código expira em 5 minutos. Se você não solicitou, não compartilhe e comunique o responsável.</p>'
     + '</div>';
 }
 
@@ -710,6 +792,12 @@ function handleCreate(body, e){
   if (!auth.ok) return buildResponse(auth, 403);
   const table = body.table;
   const schema = SCHEMA[table];
+  if (table === 'users') {
+    const token = String(body.otpToken || '').trim();
+    const code = String(body.otpCode || '').trim();
+    const otpResult = ensureAdminOtp(auth.actor, token, code, 'create_user');
+    if (!otpResult.ok) return buildResponse({ ok:false, error: otpResult.error }, otpResult.status || 403);
+  }
   const sheetInput = toSheetRecord(table, body.record || {});
   let validated = validateRecord(table, sheetInput);
   if (!validated[schema.key]) return buildResponse({ ok:false, error:'missing_primary_key' }, 400);

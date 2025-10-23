@@ -18,7 +18,7 @@ import {
     listenAllUsers,
     updateUser,
     fetchAllUsers,
-    verifyCurrentPassword,
+    requestAdminOtp,
     type UserRecord
 } from '../lib/users';
 
@@ -47,11 +47,9 @@ export function CreateUserModal({
     const [email, setEmail] = useState('');
     const [password, setPassword] = useState('');
     const [confirmPassword, setConfirmPassword] = useState('');
-    const [adminPassword, setAdminPassword] = useState('');
     const [isAdmin, setIsAdmin] = useState(false);
     const [isActive, setIsActive] = useState(true);
     const [showPassword, setShowPassword] = useState(false);
-    const [showAdminPassword, setShowAdminPassword] = useState(false);
     const [search, setSearch] = useState('');
     const [viewMode, setViewMode] = useState<'list' | 'create'>('list');
 
@@ -60,6 +58,11 @@ export function CreateUserModal({
     const [isCreating, setIsCreating] = useState(false);
     const [updatingRoleFor, setUpdatingRoleFor] = useState<string | null>(null);
     const [updatingStatusFor, setUpdatingStatusFor] = useState<string | null>(null);
+    const [otpToken, setOtpToken] = useState('');
+    const [otpExpiresAt, setOtpExpiresAt] = useState<number | null>(null);
+    const [otpSecondsLeft, setOtpSecondsLeft] = useState(0);
+    const [otpCode, setOtpCode] = useState('');
+    const [otpLoading, setOtpLoading] = useState(false);
 
     useEffect(() => {
         if (!isOpen) {
@@ -95,18 +98,35 @@ export function CreateUserModal({
         setViewMode('list');
     };
 
+    useEffect(() => {
+        if (!otpToken || !otpExpiresAt) {
+            setOtpSecondsLeft(0);
+            return;
+        }
+        const tick = () => {
+            const remaining = Math.max(0, Math.floor((otpExpiresAt - Date.now()) / 1000));
+            setOtpSecondsLeft(remaining);
+        };
+        tick();
+        const timer = window.setInterval(tick, 1000);
+        return () => window.clearInterval(timer);
+    }, [otpToken, otpExpiresAt]);
+
     const resetForm = () => {
         setFirstName('');
         setLastName('');
         setEmail('');
         setPassword('');
         setConfirmPassword('');
-        setAdminPassword('');
         setIsAdmin(false);
         setIsActive(true);
         setShowPassword(false);
-        setShowAdminPassword(false);
         setLocalError('');
+        setOtpToken('');
+        setOtpExpiresAt(null);
+        setOtpSecondsLeft(0);
+        setOtpCode('');
+        setOtpLoading(false);
     };
 
     const handleClose = () => {
@@ -114,6 +134,28 @@ export function CreateUserModal({
         setLocalSuccess('');
         setViewMode('list');
         onClose();
+    };
+
+    const requestOtp = async () => {
+        if (!user) {
+            setLocalError('Sessão expirada. Faça login novamente.');
+            return;
+        }
+        setOtpLoading(true);
+        try {
+            const { token, expiresIn } = await requestAdminOtp('create_user');
+            setOtpToken(token);
+            setOtpExpiresAt(Date.now() + expiresIn * 1000);
+            setOtpCode('');
+            setLocalSuccess('Enviamos um código de confirmação para seu e-mail.');
+        } catch (err: any) {
+            console.error('Erro ao solicitar código OTP:', err);
+            const message = typeof err?.message === 'string' ? err.message : 'Não foi possível enviar o código. Tente novamente.';
+            setLocalError(message);
+            onError(message);
+        } finally {
+            setOtpLoading(false);
+        }
     };
 
     const handleCreateUser = async () => {
@@ -126,11 +168,6 @@ export function CreateUserModal({
 
         if (!email.trim() || !password) {
             setLocalError('Email e senha são obrigatórios');
-            return;
-        }
-
-        if (!adminPassword) {
-            setLocalError('Informe sua senha para confirmar a operação');
             return;
         }
 
@@ -154,22 +191,30 @@ export function CreateUserModal({
             return;
         }
 
+        if (!otpToken) {
+            await requestOtp();
+            return;
+        }
+
+        if (!otpCode.trim()) {
+            setLocalError('Informe o código enviado por e-mail.');
+            return;
+        }
+
         setIsCreating(true);
 
         try {
-            const verified = await verifyCurrentPassword(user.uid, adminPassword);
-            if (!verified) {
-                setLocalError('Senha de administrador inválida');
-                onError('Senha de administrador inválida');
-                return;
-            }
-
             await createUser({
                 email: email.trim(),
                 fullName: fullName || email.trim(),
                 password,
                 role: isAdmin ? 'admin' : 'user',
                 isActive,
+            }, {
+                adminOtp: {
+                    token: otpToken,
+                    code: otpCode.trim(),
+                },
             });
 
             try {
@@ -532,6 +577,45 @@ export function CreateUserModal({
                                     </div>
                                 </div>
 
+                                {otpToken ? (
+                                    <div className="space-y-2 rounded-xl border border-blue-500/30 bg-blue-500/5 p-4">
+                                        <div className="flex items-center justify-between gap-3">
+                                            <span className="text-sm text-theme-primary">
+                                                Informe o código enviado para <strong>{user?.email}</strong>
+                                            </span>
+                                            <button
+                                                type="button"
+                                                onClick={requestOtp}
+                                                className="text-xs text-blue-500 hover:text-blue-600 font-medium"
+                                                disabled={otpLoading}
+                                            >
+                                                {otpLoading ? 'Enviando...' : 'Reenviar código'}
+                                            </button>
+                                        </div>
+                                        <input
+                                            type="text"
+                                            inputMode="numeric"
+                                            maxLength={6}
+                                            pattern="\d{6}"
+                                            value={otpCode}
+                                            onChange={(event) => setOtpCode(event.target.value.replace(/\D/g, '').slice(0, 6))}
+                                            placeholder="000000"
+                                            className="w-full px-3 py-2 border border-blue-500/40 rounded-lg bg-theme-base focus:ring-2 focus:ring-blue-500 focus:border-blue-500 tracking-[0.3em] text-center text-lg"
+                                        />
+                                        <div className="text-xs text-theme-secondary">
+                                            {otpSecondsLeft > 0
+                                                ? `Código expira em ${Math.floor(otpSecondsLeft / 60)
+                                                    .toString()
+                                                    .padStart(2, '0')}:${(otpSecondsLeft % 60).toString().padStart(2, '0')}.`
+                                                : 'Código expirado? Solicite um novo código.'}
+                                        </div>
+                                    </div>
+                                ) : (
+                                    <div className="text-xs text-theme-secondary bg-blue-500/5 border border-blue-500/20 rounded-xl p-3">
+                                        Um código será enviado ao seu e-mail administrativo para confirmar esta ação.
+                                    </div>
+                                )}
+
                                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                                     <label className="inline-flex items-center gap-2 text-sm text-theme-secondary">
                                         <input
@@ -551,28 +635,6 @@ export function CreateUserModal({
                                         />
                                         Habilitar acesso imediato
                                     </label>
-                                </div>
-                            </div>
-
-                            <div className="pt-3 border-t border-theme space-y-3">
-                                <div>
-                                    <label className="block text-xs font-medium mb-1 text-theme-primary">Sua senha (confirmação)</label>
-                                    <div className="relative">
-                                        <input
-                                            type={showAdminPassword ? 'text' : 'password'}
-                                            value={adminPassword}
-                                            onChange={(e) => setAdminPassword(e.target.value)}
-                                            placeholder="Digite sua senha para confirmar"
-                                            className="w-full px-3 py-2 pr-10 border border-theme rounded-lg bg-theme-base focus:ring-2 focus:ring-purple-500 focus:border-purple-500"
-                                        />
-                                        <button
-                                            type="button"
-                                            onClick={() => setShowAdminPassword((prev) => !prev)}
-                                            className="absolute right-3 top-1/2 -translate-y-1/2 text-theme-secondary hover:text-theme-primary"
-                                        >
-                                            {showAdminPassword ? <EyeOff size={14} /> : <Eye size={14} />}
-                                        </button>
-                                    </div>
                                 </div>
 
                                 <div className="bg-amber-500/10 border border-amber-500/20 p-3 rounded-lg text-xs text-theme-secondary dark:bg-amber-500/15 dark:border-amber-500/30 dark:text-amber-100">
@@ -594,18 +656,23 @@ export function CreateUserModal({
                                     </button>
                                     <button
                                         onClick={handleCreateUser}
-                                        disabled={isCreating}
+                                        disabled={isCreating || otpLoading}
                                         className="flex-1 px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 disabled:opacity-60 disabled:cursor-not-allowed transition-colors flex items-center justify-center gap-2 dark:bg-blue-600 dark:hover:bg-blue-500"
                                     >
                                         {isCreating ? (
                                             <>
                                                 <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
-                                                Criando...
+                                                Confirmando...
+                                            </>
+                                        ) : otpLoading ? (
+                                            <>
+                                                <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+                                                Enviando...
                                             </>
                                         ) : (
                                             <>
                                                 <UserPlus size={16} />
-                                                Criar usuário
+                                                {otpToken ? 'Confirmar criação' : 'Enviar código'}
                                             </>
                                         )}
                                     </button>

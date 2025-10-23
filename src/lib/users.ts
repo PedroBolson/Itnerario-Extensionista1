@@ -18,7 +18,9 @@ import {
   remoteDeleteRecord,
   remoteLoginInit,
   remoteLoginVerify,
+  remoteRequestAdminOtp,
   remoteRequestPasswordReset,
+  remoteVerifyPassword,
   remoteUpdateRecord,
 } from './remoteStore';
 import type { UserRecord, UserRole } from './types';
@@ -100,7 +102,10 @@ async function encodePasswordHash(password: string) {
   return `s:${saltB64}$h:${hashB64}`;
 }
 
-export async function createUser(input: CreateUserInput): Promise<UserRecord> {
+export async function createUser(
+  input: CreateUserInput,
+  options?: { adminOtp?: { token: string; code: string } },
+): Promise<UserRecord> {
   if (!input.email.trim()) throw new Error('Email é obrigatório');
   if (input.password.length < 6) throw new Error('Senha deve ter pelo menos 6 caracteres');
 
@@ -124,14 +129,20 @@ export async function createUser(input: CreateUserInput): Promise<UserRecord> {
         throw err;
       }
     }
-    await remoteCreateRecord('users', {
-      uid,
-      email: input.email.trim(),
-      fullName: input.fullName.trim() || input.email.trim(),
-      role: input.role ?? 'user',
-      isActive: input.isActive ?? true,
-      ...(hashedPassword ? { passwordHash: hashedPassword } : { password: input.password }),
-    });
+    await remoteCreateRecord(
+      'users',
+      {
+        uid,
+        email: input.email.trim(),
+        fullName: input.fullName.trim() || input.email.trim(),
+        role: input.role ?? 'user',
+        isActive: input.isActive ?? true,
+        ...(hashedPassword ? { passwordHash: hashedPassword } : { password: input.password }),
+      },
+      options?.adminOtp
+        ? { otpToken: options.adminOtp.token, otpCode: options.adminOtp.code }
+        : undefined,
+    );
     await hydrateFromRemote();
     const refreshed = findUserById(uid) ?? findUserByEmail(input.email.trim());
     if (!refreshed) throw new Error('Não foi possível localizar o usuário recém-criado.');
@@ -277,6 +288,14 @@ export async function completeLogin(token: string, otpCode: string): Promise<Use
 }
 
 export async function verifyCurrentPassword(uid: string, password: string): Promise<boolean> {
+  if (isBackendAvailable()) {
+    try {
+      await remoteVerifyPassword(password);
+      return true;
+    } catch {
+      return false;
+    }
+  }
   const record = findUserById(uid);
   if (!record) return false;
   return record.passwordHash ? verifyPassword(record.passwordHash, password) : false;
@@ -303,4 +322,18 @@ export async function confirmPasswordReset(params: { token: string; otp: string;
     await remoteConfirmPasswordReset(params.token, params.otp, params.newPassword);
     await hydrateFromRemote();
   }
+}
+
+export async function requestAdminOtp(purpose: string): Promise<{ token: string; expiresIn: number }> {
+  if (!isBackendAvailable()) {
+    throw new Error('Não é possível solicitar código no modo offline.');
+  }
+  const { token, expiresIn } = await remoteRequestAdminOtp(purpose);
+  if (!token) {
+    throw new Error('Não foi possível gerar um código de confirmação.');
+  }
+  return {
+    token,
+    expiresIn: Number.isFinite(expiresIn) ? expiresIn : DEFAULT_OTP_TTL,
+  };
 }
