@@ -41,6 +41,61 @@ export function normalizeRole(input: unknown): UserRole {
   return input === 'admin' ? 'admin' : 'user';
 }
 
+function ensureCrypto() {
+  if (typeof crypto !== 'undefined' && crypto.subtle) {
+    return crypto;
+  }
+  throw new Error('crypto_unavailable');
+}
+
+function base64FromString(value: string) {
+  if (typeof btoa === 'function') {
+    return btoa(value);
+  }
+  const globalBuffer = (globalThis as Record<string, any>).Buffer as
+    | { from: (value: unknown, encoding?: string) => { toString(enc: string): string } }
+    | undefined;
+  if (globalBuffer) {
+    return globalBuffer.from(value, 'utf-8').toString('base64');
+  }
+  throw new Error('base64_encoding_unavailable');
+}
+
+function base64FromBytes(bytes: Uint8Array) {
+  const globalBuffer = (globalThis as Record<string, any>).Buffer as
+    | { from: (value: unknown, encoding?: string) => { toString(enc: string): string } }
+    | undefined;
+  if (globalBuffer) {
+    return globalBuffer.from(bytes).toString('base64');
+  }
+  let binary = '';
+  bytes.forEach((byte) => {
+    binary += String.fromCharCode(byte);
+  });
+  return btoa(binary);
+}
+
+async function encodePasswordHash(password: string) {
+  const cryptoApi = ensureCrypto();
+  const saltSource = typeof cryptoApi.randomUUID === 'function'
+    ? cryptoApi.randomUUID()
+    : `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 18)}`;
+  const rawSalt = saltSource.slice(0, 16);
+  const encoder = new TextEncoder();
+  const keyData = encoder.encode(rawSalt);
+  const key = await cryptoApi.subtle.importKey(
+    'raw',
+    keyData,
+    { name: 'HMAC', hash: 'SHA-256' },
+    false,
+    ['sign'],
+  );
+  const signature = await cryptoApi.subtle.sign('HMAC', key, encoder.encode(password));
+  const saltB64 = base64FromString(rawSalt);
+  const hashB64 = base64FromBytes(new Uint8Array(signature));
+  return `s:${saltB64}$h:${hashB64}`;
+}
+
 export async function createUser(input: CreateUserInput): Promise<UserRecord> {
   if (!input.email.trim()) throw new Error('Email é obrigatório');
   if (input.password.length < 6) throw new Error('Senha deve ter pelo menos 6 caracteres');
@@ -54,13 +109,24 @@ export async function createUser(input: CreateUserInput): Promise<UserRecord> {
     const uid = typeof crypto !== 'undefined' && 'randomUUID' in crypto
       ? crypto.randomUUID()
       : `user-${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}`;
+    let hashedPassword: string | null = null;
+    try {
+      hashedPassword = await encodePasswordHash(input.password);
+    } catch (err) {
+      if ((err as Error)?.message === 'crypto_unavailable') {
+        console.warn('[createUser] WebCrypto indisponível; enviando senha para hashing no backend');
+        hashedPassword = null;
+      } else {
+        throw err;
+      }
+    }
     await remoteCreateRecord('users', {
       uid,
       email: input.email.trim(),
       fullName: input.fullName.trim() || input.email.trim(),
       role: input.role ?? 'user',
       isActive: input.isActive ?? true,
-      password: input.password,
+      ...(hashedPassword ? { passwordHash: hashedPassword } : { password: input.password }),
     });
     await hydrateFromRemote();
     const refreshed = findUserById(uid) ?? findUserByEmail(input.email.trim());
