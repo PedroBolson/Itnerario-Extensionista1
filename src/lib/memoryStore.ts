@@ -7,6 +7,7 @@ import type {
   ParticipantRecord,
   ParticipantCustomField,
   ParticipantCustomValue,
+  ParticipantCustomPage,
   Topic,
   UserRecord,
   UserRole,
@@ -70,6 +71,7 @@ export type DataStoreDump = {
     description?: string;
     constraints?: unknown;
     order?: number | string;
+    pageId?: string | null;
     isRequired?: boolean | string;
     isArchived?: boolean | string;
     createdBy?: string;
@@ -83,6 +85,18 @@ export type DataStoreDump = {
     fieldId: string;
     value: string;
     metadata?: unknown;
+    createdBy?: string;
+    createdAt?: string;
+    updatedBy?: string;
+    updatedAt?: string;
+  }>;
+  participantCustomPages: Array<{
+    id: string;
+    label: string;
+    order?: number | string;
+    icon?: string;
+    color?: string;
+    isArchived?: boolean | string;
     createdBy?: string;
     createdAt?: string;
     updatedBy?: string;
@@ -105,6 +119,7 @@ export type DataStore = {
   contents: Content[];
   lessons: Lesson[];
   participants: ParticipantState[];
+  participantCustomPages: ParticipantCustomPage[];
   participantCustomFields: ParticipantCustomField[];
   participantCustomValues: ParticipantCustomValue[];
 };
@@ -123,6 +138,7 @@ const store: InternalStore =
     contents: [],
     lessons: [],
     participants: [],
+    participantCustomPages: [],
     participantCustomFields: [],
     participantCustomValues: [],
   };
@@ -139,8 +155,10 @@ const lessonListeners = new Map<string, Set<LessonsListener>>();
 const userListeners = new Set<UsersListener>();
 const participantListeners = new Map<string, Set<ParticipantListener>>();
 const progressListeners = new Map<string, Set<ProgressListener>>();
+type CustomPageListener = (pages: ParticipantCustomPage[]) => void;
 type CustomFieldListener = (fields: ParticipantCustomField[]) => void;
 type CustomValueListener = (values: ParticipantCustomValue[]) => void;
+const customPageListeners = new Set<CustomPageListener>();
 const customFieldListeners = new Set<CustomFieldListener>();
 const customValueListeners = new Map<string, Set<CustomValueListener>>();
 
@@ -154,6 +172,12 @@ function cloneContents() {
 
 function cloneLessons() {
   return store.lessons.map((lesson) => ({ ...lesson }));
+}
+
+function cloneCustomPages() {
+  return store.participantCustomPages
+    .map((page) => ({ ...page }))
+    .sort((a, b) => a.order - b.order || a.label.localeCompare(b.label));
 }
 
 function cloneCustomFields() {
@@ -226,6 +250,11 @@ function emitContents(topicId: string) {
 function emitLessons(contentId: string) {
   const snapshot = sortByOrder(cloneLessons().filter((item) => item.contentId === contentId));
   lessonListeners.get(contentId)?.forEach((listener) => listener(snapshot));
+}
+
+function emitCustomPages() {
+  const snapshot = cloneCustomPages();
+  customPageListeners.forEach((listener) => listener(snapshot));
 }
 
 function emitUsers() {
@@ -677,6 +706,49 @@ export function getLessonProgress(code: string, lessonId: string) {
   return entry ? { ...entry } : null;
 }
 
+export function listParticipantCustomPages(): ParticipantCustomPage[] {
+  return cloneCustomPages();
+}
+
+export function subscribeParticipantCustomPages(listener: CustomPageListener) {
+  customPageListeners.add(listener);
+  listener(cloneCustomPages());
+  return () => {
+    customPageListeners.delete(listener);
+  };
+}
+
+export function upsertParticipantCustomPage(page: ParticipantCustomPage) {
+  const index = store.participantCustomPages.findIndex((item) => item.id === page.id);
+  if (index >= 0) {
+    store.participantCustomPages[index] = {
+      ...store.participantCustomPages[index],
+      ...page,
+    };
+  } else {
+    store.participantCustomPages.push({ ...page });
+  }
+  store.participantCustomPages.sort((a, b) => a.order - b.order || a.label.localeCompare(b.label));
+  emitCustomPages();
+}
+
+export function bulkUpdateParticipantCustomPageOrder(entries: Array<{ id: string; order: number }>) {
+  const orderMap = new Map(entries.map((item) => [item.id, item.order]));
+  store.participantCustomPages = store.participantCustomPages.map((page) => {
+    const nextOrder = orderMap.get(page.id);
+    return nextOrder === undefined ? page : { ...page, order: nextOrder };
+  });
+  store.participantCustomPages.sort((a, b) => a.order - b.order || a.label.localeCompare(b.label));
+  emitCustomPages();
+}
+
+export function removeParticipantCustomPage(id: string) {
+  const index = store.participantCustomPages.findIndex((page) => page.id === id);
+  if (index === -1) return;
+  store.participantCustomPages.splice(index, 1);
+  emitCustomPages();
+}
+
 export function listParticipantCustomFields(): ParticipantCustomField[] {
   return cloneCustomFields();
 }
@@ -699,7 +771,7 @@ export function upsertParticipantCustomField(field: ParticipantCustomField) {
   } else {
     store.participantCustomFields.push({ ...field });
   }
-  store.participantCustomFields.sort((a, b) => a.order - b.order || a.label.localeCompare(b.label));
+  store.participantCustomFields.sort(fieldComparator);
   emitCustomFields();
 }
 
@@ -709,8 +781,15 @@ export function bulkUpdateParticipantCustomFieldOrder(entries: Array<{ id: strin
     const nextOrder = orderMap.get(field.id);
     return nextOrder === undefined ? field : { ...field, order: nextOrder };
   });
-  store.participantCustomFields.sort((a, b) => a.order - b.order || a.label.localeCompare(b.label));
+  store.participantCustomFields.sort(fieldComparator);
   emitCustomFields();
+}
+
+function fieldComparator(a: ParticipantCustomField, b: ParticipantCustomField) {
+  const pageA = (a.pageId ?? '').localeCompare(b.pageId ?? '');
+  if (pageA !== 0) return pageA;
+  if (a.order !== b.order) return a.order - b.order;
+  return a.label.localeCompare(b.label);
 }
 
 export function removeParticipantCustomField(id: string) {
@@ -825,6 +904,18 @@ export function exportStore(): DataStoreDump {
         ]),
       ),
     })),
+    participantCustomPages: store.participantCustomPages.map((page) => ({
+      id: page.id,
+      label: page.label,
+      order: page.order,
+      icon: page.icon,
+      color: page.color,
+      isArchived: page.isArchived,
+      createdBy: page.createdBy,
+      createdAt: page.createdAt.toISOString(),
+      updatedBy: page.updatedBy,
+      updatedAt: page.updatedAt.toISOString(),
+    })),
     participantCustomFields: store.participantCustomFields.map((field) => ({
       id: field.id,
       label: field.label,
@@ -832,6 +923,7 @@ export function exportStore(): DataStoreDump {
       description: field.description,
       constraints: field.constraints,
       order: field.order,
+      pageId: field.pageId ?? null,
       isRequired: field.isRequired,
       isArchived: field.isArchived,
       createdBy: field.createdBy,
@@ -948,6 +1040,23 @@ export function importStore(dump: DataStoreDump) {
     return base;
   });
 
+  store.participantCustomPages = (dump.participantCustomPages ?? []).map((page) => ({
+    id: page.id,
+    label: page.label ?? '',
+    order: (() => {
+      const numeric = Number(page.order);
+      return Number.isFinite(numeric) ? numeric : 0;
+    })(),
+    icon: page.icon ?? undefined,
+    color: page.color ?? undefined,
+    isArchived: toBoolean(page.isArchived),
+    createdBy: page.createdBy ?? undefined,
+    createdAt: page.createdAt ? new Date(page.createdAt) : new Date(),
+    updatedBy: page.updatedBy ?? undefined,
+    updatedAt: page.updatedAt ? new Date(page.updatedAt) : new Date(),
+  }));
+  store.participantCustomPages.sort((a, b) => a.order - b.order || a.label.localeCompare(b.label));
+
   const allowedFieldTypes: ParticipantCustomField['type'][] = ['text', 'textarea', 'number', 'cpf', 'rg', 'phone', 'date', 'email', 'url'];
 
   store.participantCustomFields = (dump.participantCustomFields ?? []).map((field) => {
@@ -964,9 +1073,10 @@ export function importStore(dump: DataStoreDump) {
       order: (() => {
         const numeric = Number(field.order);
         return Number.isFinite(numeric) ? numeric : 0;
-    })(),
-    isRequired: toBoolean(field.isRequired),
-    isArchived: toBoolean(field.isArchived),
+      })(),
+      pageId: field.pageId ? String(field.pageId) : undefined,
+      isRequired: toBoolean(field.isRequired),
+      isArchived: toBoolean(field.isArchived),
       createdBy: field.createdBy ?? undefined,
       createdAt: field.createdAt ? new Date(field.createdAt) : new Date(),
       updatedBy: field.updatedBy ?? undefined,
@@ -996,6 +1106,7 @@ export function importStore(dump: DataStoreDump) {
     emitParticipant(participant.code);
     emitProgress(participant.code);
   });
+  emitCustomPages();
   emitCustomFields();
   const codes = new Set(store.participantCustomValues.map((entry) => entry.code));
   codes.forEach((code) => emitCustomValues(code));

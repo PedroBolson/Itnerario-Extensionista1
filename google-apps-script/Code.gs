@@ -83,9 +83,25 @@ const SCHEMA = {
     }
   }
   ,
+  participant_custom_pages: {
+    key: 'id',
+    headers: ['id','label','ordem','icone','cor','criadoPor','criadoEm','atualizadoPor','atualizadoEm','arquivado'],
+    validators: {
+      id: s => str(s, 128),
+      label: s => str(s, 256),
+      ordem: n => int(n),
+      icone: s => str(s, 64),
+      cor: s => str(s, 32),
+      criadoPor: s => str(s, 128),
+      criadoEm: d => dateOrNow(d),
+      atualizadoPor: s => str(s, 128),
+      atualizadoEm: d => dateOrNow(d),
+      arquivado: v => bool(v),
+    },
+  },
   participant_custom_schema: {
     key: 'id',
-    headers: ['id','label','tipo','descricao','restricoes','ordem','obrigatorio','criadoPor','criadoEm','atualizadoPor','atualizadoEm','arquivado'],
+    headers: ['id','label','tipo','descricao','restricoes','ordem','paginaId','obrigatorio','criadoPor','criadoEm','atualizadoPor','atualizadoEm','arquivado'],
     validators: {
       id: s => str(s, 128),
       label: s => str(s, 256),
@@ -93,6 +109,7 @@ const SCHEMA = {
       descricao: s => str(s, 512),
       restricoes: v => jsonText(v, 5000),
       ordem: n => int(n),
+      paginaId: s => str(s, 128),
       obrigatorio: v => bool(v),
       criadoPor: s => str(s, 128),
       criadoEm: d => dateOrNow(d),
@@ -124,7 +141,8 @@ const LEGACY_HEADERS = {
   contents: ['id','topicId','title','description','order','coverImageUrl','coverImageAlt','difficulty','createdAt','updatedAt'],
   lessons: ['id','contentId','title','youtubeUrl','order','description','createdAt','updatedAt'],
   participants: ['code','displayName','createdAt','lastActiveAt','lessonProgress'],
-  participant_custom_schema: ['id','label','type','description','settings','order','isRequired','createdBy','createdAt','updatedBy','updatedAt','isArchived'],
+  participant_custom_pages: ['id','label','order','icon','color','createdBy','createdAt','updatedBy','updatedAt','isArchived'],
+  participant_custom_schema: ['id','label','type','description','settings','order','pageId','isRequired','createdBy','createdAt','updatedBy','updatedAt','isArchived'],
   participant_custom_data: ['id','code','fieldId','value','metadata','createdBy','createdAt','updatedBy','updatedAt'],
 };
 
@@ -189,7 +207,20 @@ const FIELD_MAP = {
     description: 'descricao',
     constraints: 'restricoes',
     order: 'ordem',
+    pageId: 'paginaId',
     isRequired: 'obrigatorio',
+    createdBy: 'criadoPor',
+    createdAt: 'criadoEm',
+    updatedBy: 'atualizadoPor',
+    updatedAt: 'atualizadoEm',
+    isArchived: 'arquivado',
+  },
+  participant_custom_pages: {
+    id: 'id',
+    label: 'label',
+    order: 'ordem',
+    icon: 'icone',
+    color: 'cor',
     createdBy: 'criadoPor',
     createdAt: 'criadoEm',
     updatedBy: 'atualizadoPor',
@@ -231,6 +262,25 @@ function ensureUuid(value){
   return trimmed ? trimmed : Utilities.getUuid();
 }
 
+function normalizeCustomPageRecord(record, actor, existing){
+  const now = nowStr();
+  const merged = { ...record };
+  merged.id = ensureUuid(merged.id);
+  merged.label = (merged.label || '').toString().trim();
+  const existingOrder = existing && typeof existing.order === 'number' ? existing.order : 0;
+  merged.order = Number.isFinite(merged.order) ? merged.order : existingOrder;
+  merged.icon = (merged.icon || '').toString().trim();
+  merged.color = (merged.color || '').toString().trim();
+  merged.isArchived = Boolean(merged.isArchived);
+  const creator = existing?.createdBy || merged.createdBy || actorIdentifier(actor);
+  const createdAt = existing?.createdAt || merged.createdAt || now;
+  merged.createdBy = creator;
+  merged.createdAt = createdAt;
+  merged.updatedBy = actorIdentifier(actor);
+  merged.updatedAt = now;
+  return merged;
+}
+
 function normalizeCustomSchemaRecord(record, actor, existing){
   const now = nowStr();
   const merged = { ...record };
@@ -241,6 +291,7 @@ function normalizeCustomSchemaRecord(record, actor, existing){
   merged.constraints = merged.constraints === undefined ? '{}' : merged.constraints;
   const existingOrder = existing && typeof existing.order === 'number' ? existing.order : 0;
   merged.order = Number.isFinite(merged.order) ? merged.order : existingOrder;
+  merged.pageId = (merged.pageId || '').toString().trim();
   merged.isRequired = Boolean(merged.isRequired);
   merged.isArchived = Boolean(merged.isArchived);
   const creator = existing?.createdBy || merged.createdBy || actorIdentifier(actor);
@@ -892,7 +943,7 @@ function authorizeWrite(e, body){
     return { ok:true, actor: actor || null };
   }
 
-  if (table === 'participant_custom_schema' || table === 'participant_custom_data') {
+  if (table === 'participant_custom_pages' || table === 'participant_custom_schema' || table === 'participant_custom_data') {
     if (!actor) return { ok:false, error:'unauthenticated' };
     if (action === 'delete' && actor.role !== 'admin') {
       return { ok:false, error:'forbidden_custom_delete_admin_only' };
@@ -937,8 +988,13 @@ function handleCreate(body, e){
     if (!clientRecord.lastActiveAt) clientRecord.lastActiveAt = clientRecord.createdAt;
   }
 
+  if (table === 'participant_custom_pages') {
+    clientRecord = normalizeCustomPageRecord(clientRecord, auth.actor, null);
+  }
+
   if (table === 'participant_custom_schema') {
     clientRecord = normalizeCustomSchemaRecord(clientRecord, auth.actor, null);
+    if (clientRecord.pageId === '') clientRecord.pageId = null;
   }
 
   if (table === 'participant_custom_data') {
@@ -1008,8 +1064,12 @@ function handleUpsert(body, e){
     }
 
     let mergedNormalized = mergedClient;
+    if (table === 'participant_custom_pages') {
+      mergedNormalized = normalizeCustomPageRecord(mergedClient, auth.actor, currentClient);
+    }
     if (table === 'participant_custom_schema') {
       mergedNormalized = normalizeCustomSchemaRecord(mergedClient, auth.actor, currentClient);
+      if (mergedNormalized.pageId === '') mergedNormalized.pageId = null;
     }
     if (table === 'participant_custom_data') {
       mergedNormalized = normalizeCustomDataRecord(mergedClient, auth.actor, currentClient);
@@ -1029,8 +1089,12 @@ function handleUpsert(body, e){
     const updatedKey = toSheetKey(table, 'updatedAt');
     if (headers.includes(updatedKey)) validated[updatedKey] = nowStr();
     let newClient = clientRecord;
+    if (table === 'participant_custom_pages') {
+      newClient = normalizeCustomPageRecord(newClient, auth.actor, null);
+    }
     if (table === 'participant_custom_schema') {
       newClient = normalizeCustomSchemaRecord(newClient, auth.actor, null);
+      if (newClient.pageId === '') newClient.pageId = null;
     }
     if (table === 'participant_custom_data') {
       newClient = normalizeCustomDataRecord(newClient, auth.actor, null);
@@ -1083,8 +1147,12 @@ function handleUpdate(body, e){
   }
 
   let normalizedClient = mergedClient;
+  if (table === 'participant_custom_pages') {
+    normalizedClient = normalizeCustomPageRecord(mergedClient, auth.actor, currentClient);
+  }
   if (table === 'participant_custom_schema') {
     normalizedClient = normalizeCustomSchemaRecord(mergedClient, auth.actor, currentClient);
+    if (normalizedClient.pageId === '') normalizedClient.pageId = null;
   }
   if (table === 'participant_custom_data') {
     normalizedClient = normalizeCustomDataRecord(mergedClient, auth.actor, currentClient);
@@ -1152,7 +1220,7 @@ function handleBatchUpsert(body, e){
       if (!clientRecRaw.lastActiveAt) clientRecRaw.lastActiveAt = clientRecRaw.createdAt;
     }
 
-    if ((table === 'participant_custom_schema' || table === 'participant_custom_data') && !clientRecRaw.id) {
+    if ((table === 'participant_custom_pages' || table === 'participant_custom_schema' || table === 'participant_custom_data') && !clientRecRaw.id) {
       clientRecRaw.id = Utilities.getUuid();
     }
 
@@ -1176,8 +1244,13 @@ function handleBatchUpsert(body, e){
         if (!mergedClient.lastActiveAt) mergedClient.lastActiveAt = mergedClient.createdAt;
       }
 
+      if (table === 'participant_custom_pages') {
+        mergedClient = normalizeCustomPageRecord(mergedClient, auth.actor, currentClient);
+      }
+
       if (table === 'participant_custom_schema') {
         mergedClient = normalizeCustomSchemaRecord(mergedClient, auth.actor, currentClient);
+        if (mergedClient.pageId === '') mergedClient.pageId = null;
       }
 
       if (table === 'participant_custom_data') {
@@ -1193,8 +1266,12 @@ function handleBatchUpsert(body, e){
       updated++;
     } else {
       let newClient = clientRecRaw;
+      if (table === 'participant_custom_pages') {
+        newClient = normalizeCustomPageRecord(newClient, auth.actor, null);
+      }
       if (table === 'participant_custom_schema') {
         newClient = normalizeCustomSchemaRecord(newClient, auth.actor, null);
+        if (newClient.pageId === '') newClient.pageId = null;
       }
       if (table === 'participant_custom_data') {
         newClient = normalizeCustomDataRecord(newClient, auth.actor, null);

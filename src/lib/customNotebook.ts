@@ -1,18 +1,25 @@
 import {
   bulkUpdateParticipantCustomFieldOrder,
+  bulkUpdateParticipantCustomPageOrder,
+  listParticipantCustomPages,
   listParticipantCustomFields,
   listParticipantCustomValues,
+  removeParticipantCustomPage,
   removeParticipantCustomField,
   removeParticipantCustomValue,
+  subscribeParticipantCustomPages,
   subscribeParticipantCustomFields,
   subscribeParticipantCustomValues,
+  upsertParticipantCustomPage,
   upsertParticipantCustomField,
   upsertParticipantCustomValue,
   findParticipantCustomValueById,
 } from './memoryStore';
 import {
+  remoteDeleteCustomPage,
   remoteDeleteCustomField,
   remoteDeleteCustomValue,
+  remoteUpsertCustomPages,
   remoteUpsertCustomFields,
   remoteUpsertCustomValues,
 } from './remoteStore';
@@ -21,11 +28,13 @@ import type {
   ParticipantCustomField,
   ParticipantCustomFieldConstraints,
   ParticipantCustomFieldType,
+  ParticipantCustomPage,
   ParticipantCustomValue,
 } from './types';
 
 type FieldListener = (fields: ParticipantCustomField[]) => void;
 type ValueListener = (entries: ParticipantCustomValue[]) => void;
+type PageListener = (pages: ParticipantCustomPage[]) => void;
 
 export type CustomFieldDraft = {
   label: string;
@@ -33,6 +42,7 @@ export type CustomFieldDraft = {
   description?: string;
   constraints?: ParticipantCustomFieldConstraints;
   isRequired?: boolean;
+  pageId?: string | null;
 };
 
 export type CustomFieldPatch = Partial<CustomFieldDraft> & {
@@ -44,6 +54,17 @@ export type CustomValueDraft = {
   id?: string;
   value: string;
   metadata?: Record<string, unknown>;
+};
+
+export type CustomPageDraft = {
+  label: string;
+  icon?: string;
+  color?: string;
+};
+
+export type CustomPagePatch = Partial<CustomPageDraft> & {
+  order?: number;
+  isArchived?: boolean;
 };
 
 function generateId() {
@@ -63,8 +84,32 @@ function selectField(id: string) {
   return listParticipantCustomFields().find((field) => field.id === id);
 }
 
+function selectPage(id: string) {
+  return listParticipantCustomPages().find((page) => page.id === id);
+}
+
+export function getNotebookPages() {
+  return listParticipantCustomPages();
+}
+
+export function listenNotebookPages(listener: PageListener) {
+  return subscribeParticipantCustomPages(listener);
+}
+
 export function getNotebookFields() {
   return listParticipantCustomFields();
+}
+
+export function getActiveNotebookFields() {
+  return listParticipantCustomFields().filter((field) => !field.isArchived);
+}
+
+export function getArchivedNotebookFields() {
+  return listParticipantCustomFields().filter((field) => field.isArchived);
+}
+
+export function getNotebookFieldsByPage(pageId: string | null) {
+  return getActiveNotebookFields().filter((field) => (field.pageId ?? null) === (pageId ?? null));
 }
 
 export function listenNotebookFields(listener: FieldListener) {
@@ -79,12 +124,122 @@ export function listenNotebookEntries(code: string, listener: ValueListener) {
   return subscribeParticipantCustomValues(code.toUpperCase(), listener);
 }
 
+export async function createNotebookPage(draft: CustomPageDraft) {
+  const label = draft.label.trim();
+  if (!label) throw new Error('Informe um título para a página.');
+  const pages = listParticipantCustomPages();
+  const nextOrder = pages.length > 0 ? Math.max(...pages.map((page) => page.order)) + 1 : 0;
+  const now = new Date();
+  const page: ParticipantCustomPage = {
+    id: generateId(),
+    label,
+    order: nextOrder,
+    icon: draft.icon?.trim() || undefined,
+    color: draft.color?.trim() || undefined,
+    isArchived: false,
+    createdBy: undefined,
+    createdAt: now,
+    updatedBy: undefined,
+    updatedAt: now,
+  };
+
+  upsertParticipantCustomPage(page);
+
+  try {
+    await remoteUpsertCustomPages([
+      {
+        id: page.id,
+        label: page.label,
+        order: page.order,
+        icon: page.icon,
+        color: page.color,
+        isArchived: page.isArchived,
+      },
+    ]);
+    syncInBackground();
+  } catch (error) {
+    await hydrateFromRemote();
+    throw error;
+  }
+
+  return page;
+}
+
+export async function updateNotebookPage(id: string, patch: CustomPagePatch) {
+  const current = selectPage(id);
+  if (!current) throw new Error('Página não encontrada.');
+  const updated: ParticipantCustomPage = {
+    ...current,
+    label: patch.label !== undefined ? (patch.label.trim() || current.label) : current.label,
+    icon: patch.icon !== undefined ? (patch.icon?.trim() || undefined) : current.icon,
+    color: patch.color !== undefined ? (patch.color?.trim() || undefined) : current.color,
+    order: patch.order ?? current.order,
+    isArchived: patch.isArchived ?? current.isArchived,
+    updatedAt: new Date(),
+  };
+
+  upsertParticipantCustomPage(updated);
+
+  try {
+    await remoteUpsertCustomPages([
+      {
+        id: updated.id,
+        label: updated.label,
+        order: updated.order,
+        icon: updated.icon,
+        color: updated.color,
+        isArchived: updated.isArchived,
+      },
+    ]);
+    syncInBackground();
+  } catch (error) {
+    await hydrateFromRemote();
+    throw error;
+  }
+
+  return updated;
+}
+
+export async function reorderNotebookPages(order: string[]) {
+  const ordered = order.map((id, index) => ({ id, order: index }));
+  bulkUpdateParticipantCustomPageOrder(ordered);
+  try {
+    await remoteUpsertCustomPages(ordered);
+    syncInBackground();
+  } catch (error) {
+    await hydrateFromRemote();
+    throw error;
+  }
+}
+
+export async function archiveNotebookPage(id: string) {
+  await updateNotebookPage(id, { isArchived: true });
+}
+
+export async function restoreNotebookPage(id: string) {
+  await updateNotebookPage(id, { isArchived: false });
+}
+
+export async function deleteNotebookPage(id: string) {
+  const snapshot = selectPage(id);
+  if (!snapshot) return;
+  removeParticipantCustomPage(id);
+  try {
+    await remoteDeleteCustomPage(id);
+    syncInBackground();
+  } catch (error) {
+    await hydrateFromRemote();
+    throw error;
+  }
+}
+
 export async function createNotebookField(draft: CustomFieldDraft) {
   const label = draft.label.trim();
   if (!label) {
     throw new Error('Label é obrigatório.');
   }
-  const existing = listParticipantCustomFields();
+  const pageId = draft.pageId ? draft.pageId.trim() || null : null;
+  const existing = listParticipantCustomFields().filter((field) => (field.pageId ?? null) === (pageId ?? null));
   const nextOrder = existing.length > 0 ? Math.max(...existing.map((field) => field.order)) + 1 : 0;
   const now = new Date();
   const field: ParticipantCustomField = {
@@ -94,6 +249,7 @@ export async function createNotebookField(draft: CustomFieldDraft) {
     description: draft.description?.trim() || undefined,
     constraints: sanitizeConstraints(draft.constraints),
     order: nextOrder,
+    pageId,
     isRequired: Boolean(draft.isRequired),
     isArchived: false,
     createdBy: undefined,
@@ -113,6 +269,7 @@ export async function createNotebookField(draft: CustomFieldDraft) {
         description: field.description ?? '',
         constraints: field.constraints,
         order: field.order,
+        pageId: field.pageId,
         isRequired: field.isRequired,
         isArchived: field.isArchived,
       },
@@ -137,6 +294,7 @@ export async function updateNotebookField(id: string, patch: CustomFieldPatch) {
     description: patch.description !== undefined ? patch.description?.trim() || undefined : current.description,
     constraints: patch.constraints ? sanitizeConstraints(patch.constraints) : current.constraints,
     order: patch.order ?? current.order,
+    pageId: patch.pageId === undefined ? current.pageId : (patch.pageId ? patch.pageId.trim() || null : null),
     isRequired: patch.isRequired ?? current.isRequired,
     isArchived: patch.isArchived ?? current.isArchived,
     updatedAt: new Date(),
@@ -153,6 +311,7 @@ export async function updateNotebookField(id: string, patch: CustomFieldPatch) {
         description: updated.description ?? '',
         constraints: updated.constraints,
         order: updated.order,
+        pageId: updated.pageId,
         isRequired: updated.isRequired,
         isArchived: updated.isArchived,
       },
@@ -166,12 +325,22 @@ export async function updateNotebookField(id: string, patch: CustomFieldPatch) {
   return updated;
 }
 
-export async function reorderNotebookFields(order: string[]) {
-  const orderEntries = order.map((id, index) => ({ id, order: index }));
-  bulkUpdateParticipantCustomFieldOrder(orderEntries);
+export async function reorderNotebookFields(pageId: string | null, orderedIds: string[]) {
+  const normalizedPageId = pageId ?? null;
+  const fields = listParticipantCustomFields();
+  const target = fields
+    .filter((field) => !field.isArchived && (field.pageId ?? null) === normalizedPageId)
+    .map((field) => field.id);
+
+  if (target.length !== orderedIds.length) {
+    throw new Error('Dados inconsistentes ao reordenar campos.');
+  }
+
+  const entries = orderedIds.map((id, index) => ({ id, order: index }));
+  bulkUpdateParticipantCustomFieldOrder(entries);
 
   try {
-    await remoteUpsertCustomFields(orderEntries);
+    await remoteUpsertCustomFields(entries);
     syncInBackground();
   } catch (error) {
     await hydrateFromRemote();
@@ -181,6 +350,10 @@ export async function reorderNotebookFields(order: string[]) {
 
 export async function archiveNotebookField(id: string) {
   await updateNotebookField(id, { isArchived: true });
+}
+
+export async function restoreNotebookField(id: string) {
+  await updateNotebookField(id, { isArchived: false });
 }
 
 export async function deleteNotebookField(id: string) {

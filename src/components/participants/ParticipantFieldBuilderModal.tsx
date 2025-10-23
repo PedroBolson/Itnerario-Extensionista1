@@ -1,14 +1,17 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
 import { X } from 'lucide-react';
 import DatePicker from 'react-datepicker';
 import type { CustomFieldDraft } from '../../lib/customNotebook';
 import type { ParticipantCustomFieldType } from '../../lib/types';
+import { DatePickerPortal } from '../shared/DatePickerPortal';
 
 type Props = {
   isOpen: boolean;
   onClose: () => void;
   onSubmit: (draft: CustomFieldDraft) => Promise<void>;
+  pageOptions: Array<{ id: string; label: string }>;
+  defaultPageId?: string;
 };
 
 type NumberRange = {
@@ -33,14 +36,14 @@ const FIELD_OPTIONS: Array<{ value: ParticipantCustomFieldType; label: string; d
   { value: 'url', label: 'URL', description: 'Links de redes sociais ou sites úteis.' },
 ];
 
-export function ParticipantFieldBuilderModal({ isOpen, onClose, onSubmit }: Props) {
+export function ParticipantFieldBuilderModal({ isOpen, onClose, onSubmit, pageOptions, defaultPageId }: Props) {
   const [label, setLabel] = useState('');
   const [type, setType] = useState<ParticipantCustomFieldType>('text');
   const [description, setDescription] = useState('');
-  const [isRequired, setIsRequired] = useState(false);
   const [maxLength, setMaxLength] = useState<number | ''>('');
   const [numberRange, setNumberRange] = useState<NumberRange>({});
   const [dateRange, setDateRange] = useState<DateRange>({});
+  const [selectedPageId, setSelectedPageId] = useState<string>('__general__');
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -53,12 +56,18 @@ export function ParticipantFieldBuilderModal({ isOpen, onClose, onSubmit }: Prop
     setLabel('');
     setType('text');
     setDescription('');
-    setIsRequired(false);
     setMaxLength('');
     setNumberRange({});
     setDateRange({});
+    setSelectedPageId('__general__');
     setError(null);
   };
+
+  useEffect(() => {
+    if (!isOpen) return;
+    const initial = defaultPageId ?? pageOptions[0]?.id ?? '__general__';
+    setSelectedPageId(initial);
+  }, [isOpen, pageOptions, defaultPageId]);
 
   const handleClose = () => {
     if (submitting) return;
@@ -112,7 +121,8 @@ export function ParticipantFieldBuilderModal({ isOpen, onClose, onSubmit }: Prop
         type,
         description: description.trim() || undefined,
         constraints: buildConstraints(),
-        isRequired,
+        pageId: selectedPageId === '__general__' ? null : selectedPageId,
+        isRequired: false,
       });
       resetState();
       onClose();
@@ -242,23 +252,25 @@ export function ParticipantFieldBuilderModal({ isOpen, onClose, onSubmit }: Prop
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                     <div className="space-y-1">
                       <label className="text-sm font-medium">Data mínima</label>
-                      <DatePicker
-                        selected={dateRange.min ?? null}
-                        onChange={(value) => setDateRange((prev) => ({ ...prev, min: value }))}
-                        dateFormat="dd/MM/yyyy"
-                        className="w-full px-3 py-2 border border-theme rounded-lg bg-theme-base focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                        placeholderText="Sem limite"
-                      />
+                  <DatePicker
+                    selected={dateRange.min ?? null}
+                    onChange={(value) => setDateRange((prev) => ({ ...prev, min: value }))}
+                    dateFormat="dd/MM/yyyy"
+                    className="w-full px-3 py-2 border border-theme rounded-lg bg-theme-base focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                    placeholderText="Sem limite"
+                    popperContainer={DatePickerPortal}
+                  />
                     </div>
                     <div className="space-y-1">
                       <label className="text-sm font-medium">Data máxima</label>
-                      <DatePicker
-                        selected={dateRange.max ?? null}
-                        onChange={(value) => setDateRange((prev) => ({ ...prev, max: value }))}
-                        dateFormat="dd/MM/yyyy"
-                        className="w-full px-3 py-2 border border-theme rounded-lg bg-theme-base focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                        placeholderText="Sem limite"
-                      />
+                  <DatePicker
+                    selected={dateRange.max ?? null}
+                    onChange={(value) => setDateRange((prev) => ({ ...prev, max: value }))}
+                    dateFormat="dd/MM/yyyy"
+                    className="w-full px-3 py-2 border border-theme rounded-lg bg-theme-base focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                    placeholderText="Sem limite"
+                    popperContainer={DatePickerPortal}
+                  />
                     </div>
                   </div>
                 )}
@@ -276,17 +288,19 @@ export function ParticipantFieldBuilderModal({ isOpen, onClose, onSubmit }: Prop
                 />
               </div>
 
-              <div className="flex items-center gap-2">
-                <input
-                  id="field-required"
-                  type="checkbox"
-                  checked={isRequired}
-                  onChange={(event) => setIsRequired(event.target.checked)}
-                  className="h-4 w-4 rounded border-theme text-blue-500 focus:ring-blue-500"
-                />
-                <label htmlFor="field-required" className="text-sm text-theme-secondary">
-                  Marcar como obrigatório para preenchimento
-                </label>
+              <div className="space-y-2">
+                <label className="text-sm font-medium">Página do fichário *</label>
+                <select
+                  value={selectedPageId}
+                  onChange={(event) => setSelectedPageId(event.target.value)}
+                  className="w-full px-3 py-2 border border-theme rounded-lg bg-theme-base focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                >
+                  {pageOptions.map((option) => (
+                    <option key={option.id} value={option.id}>
+                      {option.label}
+                    </option>
+                  ))}
+                </select>
               </div>
 
               {error && (

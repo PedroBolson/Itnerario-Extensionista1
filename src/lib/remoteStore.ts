@@ -251,6 +251,15 @@ export async function remoteDeleteCustomField(id: string) {
   await remoteDeleteRecord('participant_custom_schema', id);
 }
 
+export async function remoteUpsertCustomPages(records: Array<Record<string, unknown>>) {
+  if (!isRemoteEnabled()) return;
+  await remoteUpsertRecords('participant_custom_pages', records);
+}
+
+export async function remoteDeleteCustomPage(id: string) {
+  await remoteDeleteRecord('participant_custom_pages', id);
+}
+
 export async function remoteUpsertCustomValues(records: Array<Record<string, unknown>>) {
   if (!isRemoteEnabled()) return;
   await remoteUpsertRecords(

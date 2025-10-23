@@ -94,7 +94,21 @@ export interface ParticipantCustomField {
   description?: string;
   constraints: ParticipantCustomFieldConstraints;
   order: number;
+  pageId?: string | null;
   isRequired: boolean;
+  isArchived: boolean;
+  createdBy?: string;
+  createdAt: Date;
+  updatedBy?: string;
+  updatedAt: Date;
+}
+
+export interface ParticipantCustomPage {
+  id: string;
+  label: string;
+  order: number;
+  icon?: string;
+  color?: string;
   isArchived: boolean;
   createdBy?: string;
   createdAt: Date;

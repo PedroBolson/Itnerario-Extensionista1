@@ -9,6 +9,7 @@ import type {
   Content,
   Lesson,
   ParticipantCustomField,
+  ParticipantCustomPage,
   ParticipantCustomValue,
   Topic,
   UserRole,
@@ -22,6 +23,7 @@ type Snapshot = {
   contents?: Array<Record<string, unknown>>;
   lessons?: Array<Record<string, unknown>>;
   participants?: Array<Record<string, unknown>>;
+  participant_custom_pages?: Array<Record<string, unknown>>;
   participant_custom_schema?: Array<Record<string, unknown>>;
   participant_custom_data?: Array<Record<string, unknown>>;
 };
@@ -169,6 +171,23 @@ function parseJsonObject(value: unknown): Record<string, unknown> {
   return {};
 }
 
+function normalizeCustomPages(rows: Array<Record<string, unknown>> = []): ParticipantCustomPage[] {
+  return rows
+    .filter(row => row.id && String(row.id).trim() !== '')
+    .map((row) => ({
+      id: String(row.id ?? ''),
+      label: String(row.label ?? ''),
+      order: typeof row.order === 'number' ? row.order : Number(row.order ?? 0),
+      icon: row.icon ? String(row.icon) : undefined,
+      color: row.color ? String(row.color) : undefined,
+      isArchived: coerceBoolean(row.isArchived),
+      createdBy: row.createdBy ? String(row.createdBy) : undefined,
+      createdAt: toDate(row.createdAt) ?? new Date(),
+      updatedBy: row.updatedBy ? String(row.updatedBy) : undefined,
+      updatedAt: toDate(row.updatedAt) ?? new Date(),
+    }));
+}
+
 function normalizeCustomFields(rows: Array<Record<string, unknown>> = []): ParticipantCustomField[] {
   const allowed: ParticipantCustomField['type'][] = ['text', 'textarea', 'number', 'cpf', 'rg', 'phone', 'date', 'email', 'url'];
   return rows
@@ -226,6 +245,7 @@ export async function hydrateFromRemote() {
       contents: normalizeContents(cached.contents as Array<Record<string, unknown>>),
       lessons: normalizeLessons(cached.lessons as Array<Record<string, unknown>>),
       participants: [], // SEMPRE buscar do servidor (progresso de aulas)
+      participantCustomPages: [],
       participantCustomFields: [],
       participantCustomValues: [],
     };
@@ -248,6 +268,7 @@ export async function hydrateFromRemote() {
         createdAt: lesson.createdAt ? lesson.createdAt.toISOString() : undefined,
         updatedAt: lesson.updatedAt ? lesson.updatedAt.toISOString() : undefined,
       })),
+      participantCustomPages: [],
       participants: [],
       participantCustomFields: [],
       participantCustomValues: [],
@@ -291,6 +312,7 @@ async function fetchAndUpdateData() {
       contents: normalizeContents(snapshot.contents),
       lessons: normalizeLessons(snapshot.lessons),
       participants: normalizeParticipants(snapshot.participants),
+      participantCustomPages: normalizeCustomPages(snapshot.participant_custom_pages),
       participantCustomFields: normalizeCustomFields(snapshot.participant_custom_schema),
       participantCustomValues: normalizeCustomValues(snapshot.participant_custom_data),
     };
@@ -321,6 +343,18 @@ async function fetchAndUpdateData() {
         ...lesson,
         createdAt: lesson.createdAt ? lesson.createdAt.toISOString() : undefined,
         updatedAt: lesson.updatedAt ? lesson.updatedAt.toISOString() : undefined,
+      })),
+      participantCustomPages: data.participantCustomPages.map((page) => ({
+        id: page.id,
+        label: page.label,
+        order: page.order,
+        icon: page.icon,
+        color: page.color,
+        isArchived: page.isArchived,
+        createdBy: page.createdBy,
+        createdAt: page.createdAt?.toISOString(),
+        updatedBy: page.updatedBy,
+        updatedAt: page.updatedAt?.toISOString(),
       })),
       participants: data.participants.map((participant) => ({
         code: participant.code,
