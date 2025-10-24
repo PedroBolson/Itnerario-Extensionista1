@@ -662,7 +662,7 @@ export function ParticipantNotebookModal({ isOpen, onClose, participant }: Props
 
       const normalizedCurrentPage = (current.pageId ?? '').trim() || null;
       const normalizedNewPage = (pageId ?? '').trim() || null;
-      
+
       if (normalizedCurrentPage === normalizedNewPage) return;
 
       const siblings = fields
@@ -815,9 +815,8 @@ export function ParticipantNotebookModal({ isOpen, onClose, participant }: Props
           )
           : (
             <div
-              className={`rounded-xl bg-theme-surface px-3 py-2 text-sm leading-relaxed text-theme-primary min-h-[3.25rem] ${
-                field.type === 'textarea' ? 'whitespace-pre-wrap' : 'break-words'
-              }`}
+              className={`rounded-xl bg-theme-surface px-3 py-2 text-sm leading-relaxed text-theme-primary min-h-[3.25rem] ${field.type === 'textarea' ? 'whitespace-pre-wrap' : 'break-words'
+                }`}
             >
               {field.type === 'textarea' ? baseValue : formattedValue}
             </div>
@@ -839,9 +838,8 @@ export function ParticipantNotebookModal({ isOpen, onClose, participant }: Props
         <div
           ref={innerRef}
           {...rootProps}
-          className={`w-full border border-dashed border-theme rounded-xl px-4 py-3 bg-theme-base flex items-center justify-between text-sm ${
-            isDragging ? 'shadow-md border-blue-400' : ''
-          }`}
+          className={`w-full border border-dashed border-theme rounded-xl px-4 py-3 bg-theme-base flex items-center justify-between text-sm ${isDragging ? 'shadow-md border-blue-400' : ''
+            }`}
         >
           <div className='flex flex-col min-w-0'>
             <span className='font-semibold text-theme-primary truncate'>{field.label}</span>
@@ -864,9 +862,8 @@ export function ParticipantNotebookModal({ isOpen, onClose, participant }: Props
       <div
         ref={innerRef}
         {...rootProps}
-        className={`w-full border rounded-2xl p-4 bg-theme-base/60 backdrop-blur transition-shadow flex flex-col min-w-0 ${
-          isDragging ? 'border-blue-400 shadow-lg z-20' : 'border-theme'
-        }`}
+        className={`w-full border rounded-2xl p-4 bg-theme-base/60 backdrop-blur transition-shadow flex flex-col min-w-0 ${isDragging ? 'border-blue-400 shadow-lg z-20' : 'border-theme'
+          }`}
       >
         <div className='flex items-start justify-between gap-3'>
           <div className='min-w-0 flex-1'>
@@ -952,10 +949,10 @@ export function ParticipantNotebookModal({ isOpen, onClose, participant }: Props
                   field.type === 'number'
                     ? 'number'
                     : field.type === 'email'
-                    ? 'email'
-                    : field.type === 'url'
-                    ? 'url'
-                    : 'text'
+                      ? 'email'
+                      : field.type === 'url'
+                        ? 'url'
+                        : 'text'
                 }
                 value={draft}
                 onChange={(event) => handleDraftChange(field.id, event.target.value)}
@@ -975,9 +972,8 @@ export function ParticipantNotebookModal({ isOpen, onClose, participant }: Props
         </div>
 
         <div
-          className={`flex flex-wrap items-center justify-between gap-2 text-xs text-theme-secondary ${
-            isEditing ? 'pt-2 mt-2 border-t border-theme/60' : 'pt-1 mt-2'
-          }`}
+          className={`flex flex-wrap items-center justify-between gap-2 text-xs text-theme-secondary ${isEditing ? 'pt-2 mt-2 border-t border-theme/60' : 'pt-1 mt-2'
+            }`}
         >
           <div className='space-y-1'>
             {updatedAt ? (
@@ -1019,11 +1015,10 @@ export function ParticipantNotebookModal({ isOpen, onClose, participant }: Props
               <button
                 type='button'
                 onClick={() => handleSaveValue(field)}
-                className={`px-3 py-1.5 rounded-lg text-xs flex items-center gap-2 ${
-                  isDirty
+                className={`px-3 py-1.5 rounded-lg text-xs flex items-center gap-2 ${isDirty
                     ? 'bg-blue-500 text-white hover:bg-blue-600'
                     : 'bg-theme-surface text-theme-muted cursor-not-allowed opacity-60'
-                }`}
+                  }`}
                 disabled={!isDirty || isSaving}
               >
                 {isSaving ? (
@@ -1087,11 +1082,10 @@ export function ParticipantNotebookModal({ isOpen, onClose, participant }: Props
                     type='button'
                     onClick={handleToggleFieldOrdering}
                     disabled={visibleFields.length <= 1}
-                    className={`px-3 py-2 rounded-lg border text-sm flex items-center gap-2 transition-colors ${
-                      isFieldOrdering
+                    className={`px-3 py-2 rounded-lg border text-sm flex items-center gap-2 transition-colors ${isFieldOrdering
                         ? 'border-blue-500 text-blue-500 bg-blue-500/10'
                         : 'border-theme text-theme-secondary hover:text-theme-primary hover:bg-theme-surface-hover'
-                    } disabled:opacity-60`}
+                      } disabled:opacity-60`}
                   >
                     <LayoutGrid size={16} />
                     Organizar campos
@@ -1121,11 +1115,10 @@ export function ParticipantNotebookModal({ isOpen, onClose, participant }: Props
                     <button
                       type='button'
                       onClick={() => handleSelectPage(DEFAULT_PAGE_ID)}
-                      className={`whitespace-nowrap px-3 py-1.5 rounded-full border transition-colors ${
-                        activePageId === DEFAULT_PAGE_ID
+                      className={`whitespace-nowrap px-3 py-1.5 rounded-full border transition-colors ${activePageId === DEFAULT_PAGE_ID
                           ? 'border-blue-500 text-blue-500 bg-blue-500/10'
                           : 'border-theme text-theme-secondary hover:text-theme-primary hover:bg-theme-surface-hover'
-                      }`}
+                        }`}
                     >
                       Geral
                     </button>
@@ -1145,18 +1138,16 @@ export function ParticipantNotebookModal({ isOpen, onClose, participant }: Props
                                     ref={dragProvided.innerRef}
                                     {...dragProvided.draggableProps}
                                     style={dragProvided.draggableProps.style}
-                                    className={`flex items-center ${
-                                      snapshot.isDragging ? 'z-10' : ''
-                                    }`}
+                                    className={`flex items-center ${snapshot.isDragging ? 'z-10' : ''
+                                      }`}
                                   >
                                     <button
                                       type='button'
                                       onClick={() => handleSelectPage(page.id)}
-                                      className={`whitespace-nowrap px-3 py-1.5 rounded-full border transition-colors flex items-center gap-2 ${
-                                        activePageId === page.id
+                                      className={`whitespace-nowrap px-3 py-1.5 rounded-full border transition-colors flex items-center gap-2 ${activePageId === page.id
                                           ? 'border-blue-500 text-blue-500 bg-blue-500/10'
                                           : 'border-theme text-theme-secondary hover:text-theme-primary hover:bg-theme-surface-hover'
-                                      } ${isPageOrdering ? 'cursor-grab active:cursor-grabbing' : ''}`}
+                                        } ${isPageOrdering ? 'cursor-grab active:cursor-grabbing' : ''}`}
                                       {...(isPageOrdering ? dragProvided.dragHandleProps : {})}
                                     >
                                       {page.label}
@@ -1177,11 +1168,10 @@ export function ParticipantNotebookModal({ isOpen, onClose, participant }: Props
                       type='button'
                       onClick={handleTogglePageOrdering}
                       disabled={activePages.length <= 1}
-                      className={`px-3 py-1.5 rounded-lg border text-xs flex items-center gap-2 transition-colors ${
-                        isPageOrdering
+                      className={`px-3 py-1.5 rounded-lg border text-xs flex items-center gap-2 transition-colors ${isPageOrdering
                           ? 'border-blue-500 text-blue-500 bg-blue-500/10'
                           : 'border-theme text-theme-secondary hover:text-theme-primary hover:bg-theme-surface-hover'
-                      } disabled:opacity-60`}
+                        } disabled:opacity-60`}
                     >
                       <GripVertical size={14} />
                       Organizar páginas

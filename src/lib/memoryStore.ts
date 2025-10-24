@@ -777,7 +777,7 @@ export function upsertParticipantCustomField(field: ParticipantCustomField) {
     ...field,
     pageId: normalizePageIdentifier(field.pageId ?? null),
   };
-  
+
   const index = store.participantCustomFields.findIndex((item) => item.id === field.id);
   if (index >= 0) {
     store.participantCustomFields[index] = {
@@ -1086,7 +1086,7 @@ export function importStore(dump: DataStoreDump) {
       (field as Record<string, unknown>).pageId ??
       (field as Record<string, unknown>).paginaId ??
       null;
-    
+
     return {
       id: field.id,
       label: field.label ?? '',
