@@ -313,7 +313,13 @@ export function ParticipantNotebookModal({ isOpen, onClose, participant }: Props
   const activePageNormalized = activePageId === DEFAULT_PAGE_ID ? null : activePageId;
 
   const visibleFields = useMemo(
-    () => activeFields.filter((field) => (field.pageId ?? null) === (activePageNormalized ?? null)),
+    () => {
+      const normalizedActivePage = (activePageNormalized ?? '').trim() || null;
+      return activeFields.filter((field) => {
+        const normalizedFieldPage = (field.pageId ?? '').trim() || null;
+        return normalizedFieldPage === normalizedActivePage;
+      });
+    },
     [activeFields, activePageNormalized],
   );
 
@@ -592,7 +598,8 @@ export function ParticipantNotebookModal({ isOpen, onClose, participant }: Props
     setFieldOrderingLoading(true);
     try {
       const ordered = fieldOrderingItems.map((field) => field.id);
-      await reorderNotebookFields(activePageNormalized ?? null, ordered);
+      const normalizedPageId = (activePageNormalized ?? '').trim() || null;
+      await reorderNotebookFields(normalizedPageId, ordered);
       handleCancelFieldOrdering();
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Falha ao reorganizar campos.';
@@ -652,11 +659,18 @@ export function ParticipantNotebookModal({ isOpen, onClose, participant }: Props
       const pageId = pageValue === DEFAULT_PAGE_ID ? null : pageValue;
       const current = fields.find((field) => field.id === fieldId);
       if (!current) return;
-      const currentPage = current.pageId ?? null;
-      if (currentPage === (pageId ?? null)) return;
+
+      const normalizedCurrentPage = (current.pageId ?? '').trim() || null;
+      const normalizedNewPage = (pageId ?? '').trim() || null;
+      
+      if (normalizedCurrentPage === normalizedNewPage) return;
 
       const siblings = fields
-        .filter((field) => !field.isArchived && field.id !== fieldId && (field.pageId ?? null) === (pageId ?? null))
+        .filter((field) => {
+          if (field.isArchived || field.id === fieldId) return false;
+          const fieldPage = (field.pageId ?? '').trim() || null;
+          return fieldPage === normalizedNewPage;
+        })
         .sort((a, b) => a.order - b.order || a.label.localeCompare(b.label));
       const nextOrder = siblings.length;
 

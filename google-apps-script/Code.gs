@@ -244,7 +244,10 @@ const FIELD_MAP_REVERSE = Object.keys(FIELD_MAP).reduce((acc, table) => {
   const entries = FIELD_MAP[table];
   const rev = {};
   Object.keys(entries).forEach(clientKey => {
-    rev[entries[clientKey]] = clientKey;
+    const sheetKey = entries[clientKey];
+    const normalized = String(sheetKey ?? '').trim();
+    rev[sheetKey] = clientKey;
+    rev[normalized] = clientKey;
   });
   acc[table] = rev;
   return acc;
@@ -326,7 +329,8 @@ function toSheetKey(table, clientKey){
 
 function toClientKey(table, sheetKey){
   const map = FIELD_MAP_REVERSE[table] || {};
-  return map[sheetKey] || sheetKey;
+  const normalized = String(sheetKey || '').trim();
+  return map[sheetKey] || map[normalized] || normalized;
 }
 
 function toSheetRecord(table, input){
@@ -343,7 +347,9 @@ function headersEqual(a, b){
   if (!Array.isArray(a) || !Array.isArray(b)) return false;
   if (a.length !== b.length) return false;
   for (let i=0;i<a.length;i++){
-    if (String(a[i]) !== String(b[i])) return false;
+    const left = String(a[i] ?? '').trim();
+    const right = String(b[i] ?? '').trim();
+    if (left !== right) return false;
   }
   return true;
 }
@@ -353,6 +359,20 @@ function ensureCurrentHeaders(table, sheet, headers){
   if (!expected) return headers;
   if (headersEqual(headers, expected)) return headers;
   const legacy = LEGACY_HEADERS[table];
+  if (legacy && headers.length === expected.length) {
+    const convertible = headers.every((header, index) => {
+      const normalized = String(header || '').trim();
+      const expectedHeader = String(expected[index] ?? '').trim();
+      const legacyHeader = String(legacy[index] ?? '').trim();
+      return normalized === expectedHeader || normalized === legacyHeader;
+    });
+    if (convertible) {
+      sheet.getRange(1,1,1, expected.length).setValues([expected]);
+      sheet.setFrozenRows(1);
+      sheet.getRange('1:1').setFontWeight('bold').setBackground('#f1f3f4').setWrap(true);
+      return expected;
+    }
+  }
   if (legacy && headersEqual(headers, legacy)) {
     sheet.getRange(1,1,1, expected.length).setValues([expected]);
     sheet.setFrozenRows(1);
@@ -1310,7 +1330,8 @@ function getSheetAndHeaders(table){
   const ss = SpreadsheetApp.getActive();
   const sheet = ss.getSheetByName(table);
   if (!sheet) throw new Error('sheet_not_found:'+table);
-  let headers = (sheet.getRange(1,1,1, sheet.getLastColumn()).getValues()[0] || []).map(String);
+  let headers = (sheet.getRange(1,1,1, sheet.getLastColumn()).getValues()[0] || [])
+    .map(value => String(value ?? '').trim());
   headers = ensureCurrentHeaders(table, sheet, headers);
   return { sheet, headers };
 }

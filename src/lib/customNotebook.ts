@@ -4,6 +4,7 @@ import {
   listParticipantCustomPages,
   listParticipantCustomFields,
   listParticipantCustomValues,
+  normalizePageIdentifier,
   removeParticipantCustomPage,
   removeParticipantCustomField,
   removeParticipantCustomValue,
@@ -109,7 +110,8 @@ export function getArchivedNotebookFields() {
 }
 
 export function getNotebookFieldsByPage(pageId: string | null) {
-  return getActiveNotebookFields().filter((field) => (field.pageId ?? null) === (pageId ?? null));
+  const normalized = normalizePageIdentifier(pageId);
+  return getActiveNotebookFields().filter((field) => normalizePageIdentifier(field.pageId) === normalized);
 }
 
 export function listenNotebookFields(listener: FieldListener) {
@@ -238,8 +240,8 @@ export async function createNotebookField(draft: CustomFieldDraft) {
   if (!label) {
     throw new Error('Label é obrigatório.');
   }
-  const pageId = draft.pageId ? draft.pageId.trim() || null : null;
-  const existing = listParticipantCustomFields().filter((field) => (field.pageId ?? null) === (pageId ?? null));
+  const pageId = normalizePageIdentifier(draft.pageId);
+  const existing = listParticipantCustomFields().filter((field) => normalizePageIdentifier(field.pageId) === pageId);
   const nextOrder = existing.length > 0 ? Math.max(...existing.map((field) => field.order)) + 1 : 0;
   const now = new Date();
   const field: ParticipantCustomField = {
@@ -294,7 +296,7 @@ export async function updateNotebookField(id: string, patch: CustomFieldPatch) {
     description: patch.description !== undefined ? patch.description?.trim() || undefined : current.description,
     constraints: patch.constraints ? sanitizeConstraints(patch.constraints) : current.constraints,
     order: patch.order ?? current.order,
-    pageId: patch.pageId === undefined ? current.pageId : (patch.pageId ? patch.pageId.trim() || null : null),
+    pageId: patch.pageId === undefined ? current.pageId : normalizePageIdentifier(patch.pageId),
     isRequired: patch.isRequired ?? current.isRequired,
     isArchived: patch.isArchived ?? current.isArchived,
     updatedAt: new Date(),
@@ -326,10 +328,10 @@ export async function updateNotebookField(id: string, patch: CustomFieldPatch) {
 }
 
 export async function reorderNotebookFields(pageId: string | null, orderedIds: string[]) {
-  const normalizedPageId = pageId ?? null;
+  const normalizedPageId = normalizePageIdentifier(pageId);
   const fields = listParticipantCustomFields();
   const target = fields
-    .filter((field) => !field.isArchived && (field.pageId ?? null) === normalizedPageId)
+    .filter((field) => !field.isArchived && normalizePageIdentifier(field.pageId) === normalizedPageId)
     .map((field) => field.id);
 
   if (target.length !== orderedIds.length) {

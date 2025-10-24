@@ -188,11 +188,21 @@ function normalizeCustomPages(rows: Array<Record<string, unknown>> = []): Partic
     }));
 }
 
+function normalizePageIdentifier(value: unknown): string | null {
+  if (value === null || value === undefined) return null;
+  const trimmed = String(value).trim();
+  if (!trimmed) return null;
+  if (trimmed.toLowerCase() === 'null') return null;
+  return trimmed;
+}
+
 function normalizeCustomFields(rows: Array<Record<string, unknown>> = []): ParticipantCustomField[] {
   const allowed: ParticipantCustomField['type'][] = ['text', 'textarea', 'number', 'cpf', 'rg', 'phone', 'date', 'email', 'url'];
   return rows
     .filter(row => row.id && String(row.id).trim() !== '')
     .map((row) => {
+      const rawPageId = row.pageId ?? row.paginaId ?? null;
+      const normalizedPageId = normalizePageIdentifier(rawPageId);
       const rawType = typeof row.type === 'string' ? row.type.toLowerCase().trim() : 'text';
       const type = allowed.includes(rawType as ParticipantCustomField['type'])
         ? (rawType as ParticipantCustomField['type'])
@@ -204,6 +214,7 @@ function normalizeCustomFields(rows: Array<Record<string, unknown>> = []): Parti
         description: row.description ? String(row.description) : undefined,
         constraints: parseJsonObject(row.constraints),
         order: typeof row.order === 'number' ? row.order : Number(row.order ?? 0),
+        pageId: normalizedPageId,
         isRequired: coerceBoolean(row.isRequired),
         isArchived: coerceBoolean(row.isArchived),
         createdBy: row.createdBy ? String(row.createdBy) : undefined,
@@ -387,6 +398,7 @@ async function fetchAndUpdateData() {
         description: field.description,
         constraints: field.constraints,
         order: field.order,
+        pageId: field.pageId,
         isRequired: field.isRequired,
         isArchived: field.isArchived,
         createdBy: field.createdBy,

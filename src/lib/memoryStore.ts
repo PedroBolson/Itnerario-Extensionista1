@@ -174,9 +174,19 @@ function cloneLessons() {
   return store.lessons.map((lesson) => ({ ...lesson }));
 }
 
+export function normalizePageIdentifier(value: unknown): string | null {
+  if (value === null || value === undefined) return null;
+  const trimmed = String(value).trim();
+  if (!trimmed || trimmed.toLowerCase() === 'null') return null;
+  return trimmed;
+}
+
 function cloneCustomPages() {
   return store.participantCustomPages
-    .map((page) => ({ ...page }))
+    .map((page) => ({
+      ...page,
+      id: normalizePageIdentifier(page.id) ?? page.id,
+    }))
     .sort((a, b) => a.order - b.order || a.label.localeCompare(b.label));
 }
 
@@ -185,6 +195,7 @@ function cloneCustomFields() {
     .map((field) => ({
       ...field,
       constraints: field.constraints ? { ...field.constraints } : {},
+      pageId: normalizePageIdentifier(field.pageId ?? null),
     }))
     .sort((a, b) => a.order - b.order || a.label.localeCompare(b.label));
 }
@@ -762,14 +773,19 @@ export function subscribeParticipantCustomFields(listener: CustomFieldListener) 
 }
 
 export function upsertParticipantCustomField(field: ParticipantCustomField) {
+  const normalizedField: ParticipantCustomField = {
+    ...field,
+    pageId: normalizePageIdentifier(field.pageId ?? null),
+  };
+  
   const index = store.participantCustomFields.findIndex((item) => item.id === field.id);
   if (index >= 0) {
     store.participantCustomFields[index] = {
       ...store.participantCustomFields[index],
-      ...field,
+      ...normalizedField,
     };
   } else {
-    store.participantCustomFields.push({ ...field });
+    store.participantCustomFields.push({ ...normalizedField });
   }
   store.participantCustomFields.sort(fieldComparator);
   emitCustomFields();
@@ -786,7 +802,9 @@ export function bulkUpdateParticipantCustomFieldOrder(entries: Array<{ id: strin
 }
 
 function fieldComparator(a: ParticipantCustomField, b: ParticipantCustomField) {
-  const pageA = (a.pageId ?? '').localeCompare(b.pageId ?? '');
+  const pageAId = normalizePageIdentifier(a.pageId ?? null) ?? '';
+  const pageBId = normalizePageIdentifier(b.pageId ?? null) ?? '';
+  const pageA = pageAId.localeCompare(pageBId);
   if (pageA !== 0) return pageA;
   if (a.order !== b.order) return a.order - b.order;
   return a.label.localeCompare(b.label);
@@ -1064,6 +1082,11 @@ export function importStore(dump: DataStoreDump) {
     const normalizedType = allowedFieldTypes.includes(rawType as ParticipantCustomField['type'])
       ? (rawType as ParticipantCustomField['type'])
       : 'text';
+    const rawPageId =
+      (field as Record<string, unknown>).pageId ??
+      (field as Record<string, unknown>).paginaId ??
+      null;
+    
     return {
       id: field.id,
       label: field.label ?? '',
@@ -1074,7 +1097,7 @@ export function importStore(dump: DataStoreDump) {
         const numeric = Number(field.order);
         return Number.isFinite(numeric) ? numeric : 0;
       })(),
-      pageId: field.pageId ? String(field.pageId) : undefined,
+      pageId: normalizePageIdentifier(rawPageId),
       isRequired: toBoolean(field.isRequired),
       isArchived: toBoolean(field.isArchived),
       createdBy: field.createdBy ?? undefined,
